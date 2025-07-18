@@ -1,1 +1,8 @@
 .vercel
+node_modules
+.next
+.env
+.DS_Store
+dist
+build
+npm-debug.log

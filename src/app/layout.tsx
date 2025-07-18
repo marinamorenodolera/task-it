@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: 'Task-it - Free to Focus',
   description: 'Productividad inteligente con metodología GTD + Eisenhower Matrix',
   manifest: '/manifest.json',
+  themeColor: '#2563eb',
   icons: {
     apple: '/icon-192x192.png',
   },
@@ -20,8 +21,6 @@ export const viewport = {
   maximumScale: 1,
   userScalable: false,
 }
-
-export const themeColor = '#2563eb'
 
 export default function RootLayout({
   children,

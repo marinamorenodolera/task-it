@@ -1,0 +1,46 @@
+{
+  "name": "free-to-focus",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@ducanh2912/next-pwa": "^10.2.9",
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.52.0",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/postcss": "^4.1.11",
+    "@types/node": "^24.0.14",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "autoprefixer": "^10.4.21",
+    "date-fns": "^4.1.0",
+    "eslint": "^9.31.0",
+    "eslint-config-next": "^15.4.1",
+    "framer-motion": "^12.23.6",
+    "lodash-es": "^4.17.21",
+    "lucide-react": "^0.525.0",
+    "next": "^15.4.1",
+    "next-pwa": "^5.6.0",
+    "postcss": "^8.5.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-spring": "^10.0.1",
+    "swr": "^2.3.4",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3",
+    "zustand": "^5.0.6"
+  },
+  "devDependencies": {
+    "@types/lodash-es": "^4.17.12"
+  }
+}

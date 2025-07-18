@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
@@ -9,7 +10,8 @@
     }
   },
   "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "https://wuxxpwwihazzkpqczahx.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBja2NsY2R1ZmhjdXNwaXRrZWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4MjYzOTYsImV4cCI6MjA2NzQwMjM5Nn0.n_XgkMtWX8o33y8BIIFS_CaTAVWz5UwNCTmTP1I-x2I"
+    "NEXT_PUBLIC_SUPABASE_URL": "https://ikkfxffdqulxvcowtesp.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlra2Z4ZmZkcXVseHZjb3d0ZXNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI3NzExNzMsImV4cCI6MjA2ODM0NzE3M30.up7fhEpRJ1v3aIJXPBWJ3gfLWgGubuSRfi7TiKneUd4",
+    "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlra2Z4ZmZkcXVseHZjb3d0ZXNwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Mjc3MTE3MywiZXhwIjoyMDY4MzQ3MTczfQ.YO1SwO2KGO1G8D0JNDXfnVqW82xXt-nOh5fvbtxY-Ww"
   }
 }

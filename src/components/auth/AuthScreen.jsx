@@ -57,7 +57,7 @@ const AuthScreen = () => {
         } else if (result.error.message.includes('User already registered')) {
           setError('Este email ya está registrado')
         } else if (result.error.message.includes('Database error saving new user')) {
-          setError(`Error de Supabase: ${result.error.message}`)
+          setError('Error de configuración en Supabase. El administrador debe revisar los triggers y políticas de la base de datos.')
         } else {
           setError(`Error: ${result.error.message}`)
         }

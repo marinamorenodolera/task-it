@@ -192,7 +192,7 @@ const TaskItMVP = () => {
     return { deadline, amount };
   };
 
-  function getNextWeekday(targetDay) {
+  function getNextWeekday(targetDay: number) {
     const today = new Date();
     const currentDay = today.getDay();
     const daysUntilTarget = (targetDay - currentDay + 7) % 7;

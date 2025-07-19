@@ -72,6 +72,24 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true)
       
+      // 🔍 DEBUGGING: Verificar configuración
+      console.log('🔍 Debugging Supabase:', {
+        url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        keyExists: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        keyPrefix: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...'
+      })
+      
+      // 🔗 Test de conexión básica
+      try {
+        const { data: healthCheck } = await supabase.from('user_profiles').select('count').limit(1)
+        console.log('🏥 Database connection test:', { success: true, result: healthCheck })
+      } catch (connectionError) {
+        console.error('💀 Database connection failed:', connectionError)
+        throw new Error('No se puede conectar a la base de datos. Verifica tu conexión.')
+      }
+      
+      console.log('🚀 Attempting signup for:', { email, username })
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -82,25 +100,34 @@ export const AuthProvider = ({ children }) => {
         }
       })
 
+      console.log('📧 Auth signup response:', { 
+        user: data?.user?.id, 
+        error: error?.message,
+        session: !!data?.session 
+      })
+
       if (error) {
+        console.error('❌ Auth signup error:', error)
         throw error
       }
 
-      // Auto-crear rituales por defecto si signup exitoso
+      // Auto-crear rituales por defecto si signup exitoso (OPCIONAL)
       if (data.user) {
-        try {
-          await supabase.rpc('create_default_rituals_for_user', { 
-            target_user_id: data.user.id 
-          })
-        } catch (ritualError) {
-          console.error('Error creating default rituals:', ritualError)
-          // No lanzar error aquí, el usuario se puede crear sin rituales
-        }
+        console.log('👤 User created successfully!')
+        // Comentamos la creación de rituales por ahora para que el registro funcione
+        // Los rituales se pueden crear después en la primera sesión
+        console.log('ℹ️ Skipping default rituals creation for now - user can create them later')
       }
 
+      console.log('🎉 Signup completed successfully')
       return { data, error: null }
     } catch (error) {
-      console.error('Signup error:', error)
+      console.error('💥 Signup error:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
       return { data: null, error }
     } finally {
       setLoading(false)

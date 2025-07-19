@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
-import { X, Plus, Edit3, Trash2, Settings, Save, RotateCcw } from 'lucide-react'
+import { X, Plus, Edit3, Trash2, Settings, Save, RotateCcw, RefreshCw } from 'lucide-react'
 import { useRituals } from '@/hooks/useRituals'
 
 const RitualsConfig = ({ isOpen, onClose }) => {
-  const { rituals, addRitual, updateRitual, deleteRitual, resetRituals } = useRituals()
+  const { rituals, addRitual, updateRitual, deleteRitual, resetRituals, restoreDefaultRituals } = useRituals()
   const [editingRitual, setEditingRitual] = useState(null)
   const [newRitual, setNewRitual] = useState({ title: '', icon: '📝', subtasks: [] })
   const [showAddForm, setShowAddForm] = useState(false)
@@ -67,10 +67,24 @@ const RitualsConfig = ({ isOpen, onClose }) => {
     }
   }
 
+  const handleRestoreDefaults = async () => {
+    if (confirm('¿Estás seguro de que quieres restaurar los rituales por defecto? Esto eliminará todos tus rituales personalizados.')) {
+      setLoading(true)
+      const result = await restoreDefaultRituals()
+      
+      if (result.error) {
+        alert('Error al restaurar rituales por defecto: ' + result.error)
+      } else {
+        alert('Rituales por defecto restaurados exitosamente')
+      }
+      setLoading(false)
+    }
+  }
+
   const addSubtask = (ritualData, setRitualData) => {
     const newSubtask = {
       id: `subtask_${Date.now()}`,
-      title: '',
+      text: '',
       completed: false
     }
     setRitualData({
@@ -79,11 +93,11 @@ const RitualsConfig = ({ isOpen, onClose }) => {
     })
   }
 
-  const updateSubtask = (ritualData, setRitualData, subtaskId, title) => {
+  const updateSubtask = (ritualData, setRitualData, subtaskId, text) => {
     setRitualData({
       ...ritualData,
       subtasks: ritualData.subtasks.map(st => 
-        st.id === subtaskId ? { ...st, title } : st
+        st.id === subtaskId ? { ...st, text } : st
       )
     })
   }
@@ -105,6 +119,14 @@ const RitualsConfig = ({ isOpen, onClose }) => {
             <h3 className="text-lg font-semibold">Configuración de Rituales</h3>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleRestoreDefaults}
+              disabled={loading}
+              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className="w-4 h-4 inline mr-1" />
+              Restaurar por defecto
+            </button>
             <button
               onClick={handleResetRituals}
               disabled={loading}
@@ -166,7 +188,7 @@ const RitualsConfig = ({ isOpen, onClose }) => {
                       <input
                         type="text"
                         placeholder="Subtarea..."
-                        value={subtask.title}
+                        value={subtask.text || subtask.title || ''}
                         onChange={(e) => updateSubtask(newRitual, setNewRitual, subtask.id, e.target.value)}
                         className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       />
@@ -236,7 +258,7 @@ const RitualsConfig = ({ isOpen, onClose }) => {
                         <div className="ml-6 space-y-1">
                           {ritual.subtasks.map((subtask) => (
                             <div key={subtask.id} className="text-sm text-gray-600">
-                              • {subtask.title}
+                              • {subtask.text || subtask.title}
                             </div>
                           ))}
                         </div>
@@ -268,9 +290,14 @@ const RitualsConfig = ({ isOpen, onClose }) => {
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>{rituals.length} rituales configurados</span>
-            <span>Los rituales se resetean automáticamente a las 6:00 AM</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>{rituals.length} rituales configurados</span>
+              <span>Reset automático a las 6:00 AM</span>
+            </div>
+            <div className="text-xs text-gray-500">
+              💡 Los nuevos usuarios reciben automáticamente los 5 rituales por defecto basados en GTD
+            </div>
           </div>
         </div>
       </div>
@@ -288,7 +315,7 @@ const EditRitualForm = ({ ritual, onSave, onCancel, loading }) => {
   const addSubtask = () => {
     const newSubtask = {
       id: `subtask_${Date.now()}`,
-      title: '',
+      text: '',
       completed: false
     }
     setEditData({
@@ -297,11 +324,11 @@ const EditRitualForm = ({ ritual, onSave, onCancel, loading }) => {
     })
   }
 
-  const updateSubtask = (subtaskId, title) => {
+  const updateSubtask = (subtaskId, text) => {
     setEditData({
       ...editData,
       subtasks: editData.subtasks.map(st => 
-        st.id === subtaskId ? { ...st, title } : st
+        st.id === subtaskId ? { ...st, text } : st
       )
     })
   }
@@ -337,7 +364,7 @@ const EditRitualForm = ({ ritual, onSave, onCancel, loading }) => {
           <div key={subtask.id} className="flex gap-2 mb-2">
             <input
               type="text"
-              value={subtask.title}
+              value={subtask.text || subtask.title || ''}
               onChange={(e) => updateSubtask(subtask.id, e.target.value)}
               className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
             />

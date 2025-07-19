@@ -10,12 +10,105 @@ export const useRituals = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Default rituals configuration
+  const getDefaultRituals = () => [
+    {
+      title: "☀️ Morning review & Big 3",
+      icon: "☀️",
+      position_order: 0,
+      subtasks: [
+        { id: "energy", text: "Check energy level" },
+        { id: "big3", text: "Select Big 3 for today" },
+        { id: "calendar", text: "Review calendar" }
+      ]
+    },
+    {
+      title: "📧 Process inbox to zero",
+      icon: "📧",
+      position_order: 1,
+      subtasks: [
+        { id: "inbox_zero", text: "Inbox to zero" },
+        { id: "urgent_emails", text: "Reply urgent emails" }
+      ]
+    },
+    {
+      title: "💪 Physical activity",
+      icon: "💪",
+      position_order: 2,
+      subtasks: [
+        { id: "exercise", text: "Complete exercise" },
+        { id: "tracker", text: "Log in sport tracker" }
+      ]
+    },
+    {
+      title: "📝 Plan tomorrow",
+      icon: "📝",
+      position_order: 3,
+      subtasks: [
+        { id: "review_progress", text: "Review today's progress" },
+        { id: "set_priorities", text: "Set tomorrow's priorities" }
+      ]
+    },
+    {
+      title: "🔒 Workday shutdown",
+      icon: "🔒",
+      position_order: 4,
+      subtasks: [
+        { id: "inbox_cero", text: "Inbox a cero" },
+        { id: "calendario_revisado", text: "Calendario revisado" },
+        { id: "escritorio_ordenado", text: "Escritorio ordenado" }
+      ]
+    }
+  ]
+
+  // Initialize default rituals for new users
+  const initializeDefaultRituals = async () => {
+    if (!user) return
+
+    try {
+      // Check if user already has rituals
+      const { data: existingRituals, error: checkError } = await supabase
+        .from('daily_rituals')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1)
+
+      if (checkError) throw checkError
+
+      // If no rituals exist, create defaults
+      if (!existingRituals || existingRituals.length === 0) {
+        const defaultRituals = getDefaultRituals().map(ritual => ({
+          user_id: user.id,
+          title: ritual.title,
+          icon: ritual.icon,
+          subtasks: ritual.subtasks,
+          is_active: true,
+          is_default: true,
+          position_order: ritual.position_order
+        }))
+
+        const { error: insertError } = await supabase
+          .from('daily_rituals')
+          .insert(defaultRituals)
+
+        if (insertError) throw insertError
+        
+        console.log('✅ Default rituals initialized for user')
+      }
+    } catch (err) {
+      console.error('Error initializing default rituals:', err)
+    }
+  }
+
   // Load rituals and today's completions
   const loadRituals = async () => {
     if (!user) return
 
     try {
       setLoading(true)
+
+      // Initialize defaults if needed
+      await initializeDefaultRituals()
 
       // Load rituals
       const { data: ritualsData, error: ritualsError } = await supabase
@@ -52,7 +145,8 @@ export const useRituals = () => {
           icon: ritual.icon,
           completed: completion ? completion.is_completed : false,
           subtasks: subtasks.map(subtask => ({
-            ...subtask,
+            id: subtask.id,
+            text: subtask.text || subtask.title, // Support both formats
             completed: completedSubtasks.includes(subtask.id)
           })),
           position_order: ritual.position_order,
@@ -222,6 +316,44 @@ export const useRituals = () => {
     }
   }
 
+  // Restore default rituals (user option)
+  const restoreDefaultRituals = async () => {
+    if (!user) return { error: 'Usuario no autenticado' }
+
+    try {
+      // Delete existing rituals
+      const { error: deleteError } = await supabase
+        .from('daily_rituals')
+        .delete()
+        .eq('user_id', user.id)
+
+      if (deleteError) throw deleteError
+
+      // Insert defaults
+      const defaultRituals = getDefaultRituals().map(ritual => ({
+        user_id: user.id,
+        title: ritual.title,
+        icon: ritual.icon,
+        subtasks: ritual.subtasks,
+        is_active: true,
+        is_default: true,
+        position_order: ritual.position_order
+      }))
+
+      const { error: insertError } = await supabase
+        .from('daily_rituals')
+        .insert(defaultRituals)
+
+      if (insertError) throw insertError
+
+      await loadRituals()
+      return { error: null }
+    } catch (err) {
+      console.error('Error restoring default rituals:', err)
+      return { error: err.message }
+    }
+  }
+
   // Setup real-time subscription and auto-reset
   useEffect(() => {
     if (!user) return
@@ -285,6 +417,7 @@ export const useRituals = () => {
     updateRitual,
     deleteRitual,
     resetRituals,
+    restoreDefaultRituals,
     loadRituals
   }
 }

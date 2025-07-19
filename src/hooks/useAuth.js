@@ -72,21 +72,11 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true)
       
-      // 🔍 DEBUGGING: Verificar configuración
-      console.log('🔍 Debugging Supabase:', {
-        url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-        keyExists: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        keyPrefix: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...'
+      // 🔍 Config check
+      console.log('🔍 Config check:', {
+        hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
       })
-      
-      // 🔗 Test de conexión básica
-      try {
-        const { data: healthCheck } = await supabase.from('user_profiles').select('count').limit(1)
-        console.log('🏥 Database connection test:', { success: true, result: healthCheck })
-      } catch (connectionError) {
-        console.error('💀 Database connection failed:', connectionError)
-        throw new Error('No se puede conectar a la base de datos. Verifica tu conexión.')
-      }
       
       console.log('🚀 Attempting signup for:', { email, username })
       
@@ -94,40 +84,34 @@ export const AuthProvider = ({ children }) => {
         email,
         password,
         options: {
-          data: {
-            username
-          }
+          data: { username }
         }
       })
 
-      console.log('📧 Auth signup response:', { 
-        user: data?.user?.id, 
+      console.log('📧 Signup response:', { 
+        hasUser: !!data?.user, 
+        userId: data?.user?.id,
         error: error?.message,
-        session: !!data?.session 
+        errorCode: error?.code
       })
 
       if (error) {
-        console.error('❌ Auth signup error:', error)
+        console.error('❌ Signup error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
         throw error
       }
 
-      // Auto-crear rituales por defecto si signup exitoso (OPCIONAL)
       if (data.user) {
-        console.log('👤 User created successfully!')
-        // Comentamos la creación de rituales por ahora para que el registro funcione
-        // Los rituales se pueden crear después en la primera sesión
-        console.log('ℹ️ Skipping default rituals creation for now - user can create them later')
+        console.log('✅ User created successfully:', data.user.id)
       }
 
-      console.log('🎉 Signup completed successfully')
       return { data, error: null }
     } catch (error) {
-      console.error('💥 Signup error:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      })
+      console.error('💥 Signup failed:', error)
       return { data: null, error }
     } finally {
       setLoading(false)

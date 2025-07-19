@@ -41,64 +41,29 @@ const AuthScreen = () => {
       return
     }
 
-    console.log('🎯 Starting auth process:', { 
-      isLogin, 
-      email: formData.email, 
-      username: formData.username 
-    })
-
     try {
       let result
       
       if (isLogin) {
-        console.log('🔐 Attempting login...')
         result = await signIn(formData.email, formData.password)
       } else {
-        console.log('📝 Attempting signup...')
         result = await signUp(formData.email, formData.password, formData.username)
       }
 
-      console.log('📋 Auth result:', {
-        hasData: !!result.data,
-        hasUser: !!result.data?.user,
-        hasError: !!result.error,
-        errorMessage: result.error?.message,
-        errorCode: result.error?.code
-      })
-
       if (result.error) {
-        console.error('❌ Auth failed:', result.error)
-        
-        // Mejorado manejo de errores específicos
+        // Manejo de errores simplificado
         if (result.error.message.includes('Invalid login credentials')) {
           setError('Email o contraseña incorrectos')
         } else if (result.error.message.includes('User already registered')) {
           setError('Este email ya está registrado')
-        } else if (result.error.message.includes('Email rate limit exceeded')) {
-          setError('Demasiados intentos. Espera unos minutos antes de intentar de nuevo.')
-        } else if (result.error.message.includes('Database error')) {
-          setError('Error en la base de datos. Intenta de nuevo en unos minutos.')
-        } else if (result.error.message.includes('Invalid email')) {
-          setError('El formato del email no es válido')
-        } else if (result.error.message.includes('No se puede conectar')) {
-          setError('Problema de conexión con la base de datos. Verifica tu internet.')
-        } else if (result.error.message.includes('Missing Supabase')) {
-          setError('Error de configuración. Contacta al administrador.')
-        } else if (result.error.code === 'signup_disabled') {
-          setError('El registro está temporalmente deshabilitado')
-        } else if (result.error.code === 'email_address_invalid') {
-          setError('La dirección de email no es válida')
-        } else if (result.error.code === 'password_too_short') {
-          setError('La contraseña es demasiado corta')
+        } else if (result.error.message.includes('Database error saving new user')) {
+          setError(`Error de Supabase: ${result.error.message}`)
         } else {
           setError(`Error: ${result.error.message}`)
         }
       } else if (!isLogin && result.data?.user) {
         setError('')
-        console.log('🎉 Signup successful!')
         alert('¡Cuenta creada exitosamente! Ya puedes usar Task-It')
-      } else if (isLogin && result.data?.user) {
-        console.log('🎉 Login successful!')
       }
     } catch (err) {
       console.error('💥 Unexpected auth error:', err)

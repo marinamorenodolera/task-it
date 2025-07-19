@@ -30,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={`${inter.className} bg-gray-50 text-gray-900`}>
-        <div className="min-h-screen pb-16 md:pb-0">
+        <div className="min-h-screen pb-20 md:pb-0">
           {children}
         </div>
         <BottomNavigation />

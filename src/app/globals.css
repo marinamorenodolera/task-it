@@ -3,21 +3,28 @@
 @tailwind utilities;
 
 :root {
-  /* TASK-IT BRAND COLORS */
-  --brand-primary: #2563eb;      /* Blue focus */
-  --brand-secondary: #1e40af;    /* Darker blue */
+  /* FREE TO FOCUS BRAND COLORS - Más vibrantes */
+  --brand-primary: #3b82f6;      /* Blue más vibrante */
+  --brand-secondary: #1d4ed8;    /* Blue más profundo */
   --brand-accent: #06b6d4;       /* Cyan energético */
   --brand-success: #10b981;      /* Green completado */
   --brand-warning: #f59e0b;      /* Amber urgent */
   --brand-danger: #ef4444;       /* Red importante */
   
-  /* TASK-IT PRIORITY COLORS */
-  --priority-urgent: #ef4444;        /* 🔥 Rojo */
-  --priority-important: #f59e0b;     /* ⚡ Amarillo */
-  --priority-nice: #6b7280;         /* 📝 Gris */
+  /* ENHANCED PRIORITY COLORS */
+  --priority-urgent: #ef4444;        /* 🔥 Rojo vibrante */
+  --priority-important: #f59e0b;     /* ⚡ Amarillo dorado */
+  --priority-nice: #6b7280;         /* 📝 Gris suave */
   --priority-delegate: #8b5cf6;     /* 🗑️ Púrpura */
-  --priority-big3: #2563eb;         /* ⭐ Azul */
-  --priority-sport: #10b981;        /* 💪 Verde */
+  --priority-big3: #3b82f6;         /* ⭐ Azul vibrante */
+  --priority-sport: #10b981;        /* 💪 Verde esmeralda */
+  
+  /* SECTION COLORS - Fondos suaves */
+  --section-inbox: #dbeafe;         /* Azul suave */
+  --section-important: #fef3c7;     /* Amarillo suave */
+  --section-routine: #f3f4f6;       /* Gris suave */
+  --section-ritual: #e9d5ff;        /* Púrpura suave */
+  --section-sport: #d1fae5;         /* Verde suave */
   
   /* SEMANTIC COLORS */
   --color-background: #f8fafc;       /* Gray-50 */
@@ -48,6 +55,13 @@
   
   /* INTERACTIVE ELEMENTS - Touch optimized */
   --button-height: 44px;              /* Apple/Google guidelines */
+  --touch-target-min: 44px;          /* Minimum touch target */
+  
+  /* SAFE AREA - iOS Support */
+  --safe-area-inset-top: env(safe-area-inset-top);
+  --safe-area-inset-right: env(safe-area-inset-right);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom);
+  --safe-area-inset-left: env(safe-area-inset-left);
   --button-height-compact: 36px;      /* Para secondary buttons */
   --input-height: 44px;
   --touch-target-min: 44px;
@@ -64,6 +78,42 @@
   --font-size-xl: 1.25rem;      /* 20px */
   --font-size-2xl: 1.5rem;      /* 24px */
   --font-size-3xl: 1.875rem;    /* 30px */
+}
+
+/* SAFE AREA UTILITIES */
+.pb-safe {
+  padding-bottom: var(--safe-area-inset-bottom);
+}
+
+.pt-safe {
+  padding-top: var(--safe-area-inset-top);
+}
+
+.pl-safe {
+  padding-left: var(--safe-area-inset-left);
+}
+
+.pr-safe {
+  padding-right: var(--safe-area-inset-right);
+}
+
+/* TOUCH OPTIMIZED COMPONENTS */
+.touch-target {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+}
+
+/* BOTTOM NAVIGATION SPECIFIC */
+.bottom-nav {
+  padding-bottom: max(1rem, var(--safe-area-inset-bottom));
+}
+
+/* MOBILE FIRST RESPONSIVE */
+@media (max-width: 768px) {
+  .mobile-optimized {
+    font-size: 16px; /* Prevents zoom on iOS */
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 /* TABLET ADJUSTMENTS */

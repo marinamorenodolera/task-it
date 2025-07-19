@@ -23,16 +23,55 @@ import {
   Settings
 } from 'lucide-react';
 
+interface Task {
+  id: number;
+  title: string;
+  important: boolean;
+  completed: boolean;
+  addedAt: Date;
+  deadline?: Date | null;
+  link?: string | null;
+  notes: string;
+  amount?: number | null;
+}
+
+interface Activity {
+  id: number;
+  type: string;
+  date: string;
+  notes: string;
+  duration: number;
+}
+
+interface DailyRitual {
+  id: string;
+  title: string;
+  completed: boolean;
+  icon: string;
+  subtasks: Array<{
+    id: string;
+    title: string;
+    completed: boolean;
+    estimated_minutes?: number;
+  }>;
+}
+
+interface NewActivity {
+  type: string;
+  notes: string;
+  duration: string;
+}
+
 const TaskItMVP = () => {
   const [quickCapture, setQuickCapture] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [organizingMode, setOrganizingMode] = useState(false);
   const [voiceCommand, setVoiceCommand] = useState('');
-  const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showQuickOptions, setShowQuickOptions] = useState(false);
-  const [lastAddedTask, setLastAddedTask] = useState(null);
+  const [lastAddedTask, setLastAddedTask] = useState<number | null>(null);
   
-  const [tasks, setTasks] = useState([
+  const [tasks, setTasks] = useState<Task[]>([
     { 
       id: 1, 
       title: 'Revisar propuesta de cliente importante', 
@@ -68,7 +107,7 @@ const TaskItMVP = () => {
     },
   ]);
 
-  const [activities, setActivities] = useState([
+  const [activities, setActivities] = useState<Activity[]>([
     { 
       id: 1, 
       type: 'Reunión de equipo', 
@@ -85,11 +124,11 @@ const TaskItMVP = () => {
     },
   ]);
 
-  const [newActivity, setNewActivity] = useState({ type: '', notes: '', duration: '' });
+  const [newActivity, setNewActivity] = useState<NewActivity>({ type: '', notes: '', duration: '' });
   const [showActivityForm, setShowActivityForm] = useState(false);
 
   // Enhanced Daily Rituals con subtareas
-  const [dailyRituals, setDailyRituals] = useState([
+  const [dailyRituals, setDailyRituals] = useState<DailyRitual[]>([
     { 
       id: 'morning-review', 
       title: 'Revisión matutina y Big 3', 
@@ -144,10 +183,10 @@ const TaskItMVP = () => {
     }
   ]);
 
-  const [expandedRitual, setExpandedRitual] = useState(null);
+  const [expandedRitual, setExpandedRitual] = useState<string | null>(null);
 
   // Natural Language Processing para fechas
-  const parseNaturalLanguage = (text: string) => {
+  const parseNaturalLanguage = (text: string): { deadline: Date | null; amount: number | null } => {
     const datePatterns = {
       'hoy': 0,
       'mañana': 1, 
@@ -192,7 +231,7 @@ const TaskItMVP = () => {
     return { deadline, amount };
   };
 
-  function getNextWeekday(targetDay: number) {
+  function getNextWeekday(targetDay: number): number {
     const today = new Date();
     const currentDay = today.getDay();
     const daysUntilTarget = (targetDay - currentDay + 7) % 7;
@@ -200,7 +239,7 @@ const TaskItMVP = () => {
   }
 
   // Enhanced Quick Capture
-  const addQuickTask = () => {
+  const addQuickTask = (): void => {
     if (quickCapture.trim()) {
       const { deadline, amount } = parseNaturalLanguage(quickCapture);
       
@@ -230,7 +269,7 @@ const TaskItMVP = () => {
   };
 
   // Enhanced Auto-organize con fechas
-  const autoOrganize = () => {
+  const autoOrganize = (): void => {
     const patterns = {
       important: ['llamar', 'reunión', 'revisar', 'proyecto', 'cliente', 'deadline', 'urgente', 'presentación', 'propuesta'],
       routine: ['comprar', 'limpiar', 'organizar', 'actualizar', 'verificar', 'material']
@@ -255,7 +294,7 @@ const TaskItMVP = () => {
     }));
   };
 
-  const startVoiceOrganization = () => {
+  const startVoiceOrganization = (): void => {
     setIsListening(true);
     setOrganizingMode(true);
     
@@ -276,19 +315,19 @@ const TaskItMVP = () => {
     }, 3000);
   };
 
-  const toggleTaskComplete = (id) => {
+  const toggleTaskComplete = (id: number): void => {
     setTasks(tasks.map(task => 
       task.id === id ? { ...task, completed: !task.completed } : task
     ));
   };
 
-  const toggleTaskImportant = (id) => {
+  const toggleTaskImportant = (id: number): void => {
     setTasks(tasks.map(task => 
       task.id === id ? { ...task, important: !task.important } : task
     ));
   };
 
-  const toggleDailyRitual = (id) => {
+  const toggleDailyRitual = (id: string): void => {
     setDailyRituals(rituals => 
       rituals.map(ritual => 
         ritual.id === id ? { ...ritual, completed: !ritual.completed } : ritual
@@ -296,7 +335,7 @@ const TaskItMVP = () => {
     );
   };
 
-  const toggleRitualSubtask = (ritualId, subtaskId) => {
+  const toggleRitualSubtask = (ritualId: string, subtaskId: string): void => {
     setDailyRituals(rituals => 
       rituals.map(ritual => 
         ritual.id === ritualId 
@@ -314,7 +353,7 @@ const TaskItMVP = () => {
   };
 
   // Simular reset a las 6:00 AM
-  const resetDailyRituals = () => {
+  const resetDailyRituals = (): void => {
     setDailyRituals(rituals => 
       rituals.map(ritual => ({ 
         ...ritual, 
@@ -324,7 +363,7 @@ const TaskItMVP = () => {
     );
   };
 
-  const addQuickOption = (taskId, type, value) => {
+  const addQuickOption = (taskId: number, type: string, value: any): void => {
     setTasks(tasks.map(task => 
       task.id === taskId ? { ...task, [type]: value } : task
     ));
@@ -332,7 +371,7 @@ const TaskItMVP = () => {
     setLastAddedTask(null);
   };
 
-  const addActivity = () => {
+  const addActivity = (): void => {
     if (newActivity.type.trim()) {
       const activity = {
         id: Date.now(),
@@ -347,11 +386,11 @@ const TaskItMVP = () => {
     }
   };
 
-  const formatDeadline = (deadline) => {
+  const formatDeadline = (deadline: Date | null): string | null => {
     if (!deadline) return null;
     const now = new Date();
     const date = new Date(deadline);
-    const diffDays = Math.ceil((date - now) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     
     if (diffDays === 0) return '🔴 Hoy';
     if (diffDays === 1) return '🟡 Mañana';
@@ -387,8 +426,8 @@ const TaskItMVP = () => {
               type="text"
               placeholder="Ej: Llamar cliente jueves 15:00 para proyecto..."
               value={quickCapture}
-              onChange={(e) => setQuickCapture(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && addQuickTask()}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuickCapture(e.target.value)}
+              onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && addQuickTask()}
               className="flex-1 px-4 py-3 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               autoFocus
             />
@@ -721,23 +760,23 @@ const TaskItMVP = () => {
                   type="text"
                   placeholder="Tipo de actividad..."
                   value={newActivity.type}
-                  onChange={(e) => setNewActivity({...newActivity, type: e.target.value})}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivity({...newActivity, type: e.target.value})}
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
                 <input
                   type="number"
                   placeholder="Duración (min)"
                   value={newActivity.duration}
-                  onChange={(e) => setNewActivity({...newActivity, duration: e.target.value})}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewActivity({...newActivity, duration: e.target.value})}
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
               <textarea
                 placeholder="Notas (opcional)..."
                 value={newActivity.notes}
-                onChange={(e) => setNewActivity({...newActivity, notes: e.target.value})}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewActivity({...newActivity, notes: e.target.value})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-green-500"
-                rows="2"
+                rows={2}
               />
               <div className="flex gap-2">
                 <button

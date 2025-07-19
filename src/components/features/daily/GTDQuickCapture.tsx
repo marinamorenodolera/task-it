@@ -68,7 +68,15 @@ const parseGTDTask = (input: string): ParsedTask => {
   // Context detection
   for (const [context, keywords] of Object.entries(GTD_NLP_PATTERNS.contexts)) {
     if (keywords.some(keyword => inputLower.includes(keyword))) {
-      result.suggestedContext = DEFAULT_GTD_CONTEXTS.find(c => c.name === context)
+      const foundContext = DEFAULT_GTD_CONTEXTS.find(c => c.name === context)
+      if (foundContext) {
+        result.suggestedContext = {
+          ...foundContext,
+          id: context,
+          user_id: '',
+          created_at: new Date()
+        }
+      }
       break
     }
   }

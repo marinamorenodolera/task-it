@@ -130,6 +130,129 @@ const SmartAttachmentsPanel = ({
           </div>
         )
 
+      case 'image':
+        return (
+          <div className="space-y-3">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files[0]
+                if (file) {
+                  const reader = new FileReader()
+                  reader.onload = (event) => {
+                    setData({
+                      ...data, 
+                      image: event.target.result,
+                      fileName: file.name,
+                      fileSize: file.size
+                    })
+                  }
+                  reader.readAsDataURL(file)
+                }
+              }}
+              className="w-full px-3 py-2 border border-pink-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 min-h-[44px]"
+            />
+            {data.image && (
+              <div className="space-y-2">
+                <img 
+                  src={data.image} 
+                  alt="Preview" 
+                  className="max-w-full h-32 object-cover rounded-lg border border-pink-200"
+                />
+                <p className="text-xs text-gray-600">{data.fileName}</p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <BaseButton
+                onClick={() => {
+                  onAttach({
+                    type: 'image', 
+                    content: data.image,
+                    title: data.fileName,
+                    fileName: data.fileName,
+                    fileSize: data.fileSize
+                  })
+                  setActiveType(null)
+                  setData({})
+                }}
+                disabled={!data.image}
+                className="flex-1 bg-pink-600 hover:bg-pink-700"
+              >
+                Añadir Imagen
+              </BaseButton>
+              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
+                Cancelar
+              </BaseButton>
+            </div>
+          </div>
+        )
+
+      case 'document':
+        return (
+          <div className="space-y-3">
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
+              onChange={(e) => {
+                const file = e.target.files[0]
+                if (file) {
+                  const reader = new FileReader()
+                  reader.onload = (event) => {
+                    setData({
+                      ...data, 
+                      document: event.target.result,
+                      fileName: file.name,
+                      fileSize: file.size,
+                      fileType: file.type
+                    })
+                  }
+                  reader.readAsDataURL(file)
+                }
+              }}
+              className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[44px]"
+            />
+            {data.document && (
+              <div className="space-y-2">
+                <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-orange-600">📄</span>
+                    <div>
+                      <p className="text-sm font-medium text-orange-800">{data.fileName}</p>
+                      <p className="text-xs text-orange-600">
+                        {(data.fileSize / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <BaseButton
+                onClick={() => {
+                  onAttach({
+                    type: 'document', 
+                    content: data.document,
+                    title: data.fileName,
+                    fileName: data.fileName,
+                    fileSize: data.fileSize,
+                    fileType: data.fileType
+                  })
+                  setActiveType(null)
+                  setData({})
+                }}
+                disabled={!data.document}
+                className="flex-1 bg-orange-600 hover:bg-orange-700"
+              >
+                Añadir Documento
+              </BaseButton>
+              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
+                Cancelar
+              </BaseButton>
+            </div>
+          </div>
+        )
+
       case 'location':
         return (
           <div className="space-y-2">

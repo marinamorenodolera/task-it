@@ -161,11 +161,8 @@ const TaskItApp = () => {
           await deleteTask(task.id)
         }
         
-        // Para rituales, marcarlos como no completados en lugar de eliminarlos
-        // (ya que los rituales se resetean diariamente)
-        for (const ritual of completedRituals) {
-          toggleRitual(ritual.id)
-        }
+        // Para rituales, solo los quitamos de la vista (se resetean diariamente automáticamente)
+        // No hacemos nada con los rituales completados, se resetean solos a las 6 AM
         
         console.log(`${completedTasks.length} tareas eliminadas y ${completedRituals.length} rituales reseteados`)
       } catch (error) {
@@ -204,12 +201,12 @@ const TaskItApp = () => {
         setAttachments([])
         setTaskDeadline('')
         
-        // Ocultar modal después de 3 segundos
+        // Ocultar modal después de 1.5 segundos
         setTimeout(() => {
           setShowTaskCreatedModal(false)
           setCreatedTaskInfo(null)
           setLastAddedTask(null)
-        }, 3000)
+        }, 1500)
       }
     }
   }
@@ -292,8 +289,11 @@ const TaskItApp = () => {
       <TaskDetailScreen 
         task={selectedTask}
         onBack={handleBackToMain}
-        onEdit={() => setCurrentView('task-edit')}
         onToggleComplete={toggleTaskComplete}
+        onUpdate={async (updatedTask) => {
+          await updateTask(updatedTask.id, updatedTask)
+          setSelectedTask(updatedTask)
+        }}
       />
     )
   }
@@ -890,43 +890,36 @@ const TaskItApp = () => {
         </div>
       )}
 
-      {/* Modal de Tarea Creada */}
+      {/* Notificación sutil de Tarea Creada */}
       {showTaskCreatedModal && createdTaskInfo && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-sm w-full p-6 text-center shadow-xl animate-bounce">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-2xl">✅</span>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              ¡Tarea creada!
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              "{createdTaskInfo.title}" se ha añadido a <strong>Otras Tareas</strong>
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setShowTaskCreatedModal(false)
-                  setCreatedTaskInfo(null)
-                }}
-                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Cerrar
-              </button>
+        <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 max-w-sm">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-sm">✅</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900">Tarea creada</p>
+                <p className="text-xs text-gray-600 truncate">
+                  "{createdTaskInfo.title}" → Otras Tareas
+                </p>
+              </div>
               <button
                 onClick={() => {
                   toggleTaskImportant(createdTaskInfo.id)
                   setShowTaskCreatedModal(false)
                   setCreatedTaskInfo(null)
                 }}
-                className="flex-1 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+                className="text-yellow-500 hover:text-yellow-600 transition-colors"
+                title="Marcar como Big 3"
               >
-                ⭐ Marcar Big 3
+                ⭐
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   )
 }

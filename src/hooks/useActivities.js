@@ -7,16 +7,76 @@ export const useActivities = () => {
   const [activities, setActivities] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [predefinedActivities, setPredefinedActivities] = useState([])
 
-  // Load activities (simplified version using localStorage)
+  // Actividades predeterminadas por defecto
+  const defaultPredefinedActivities = [
+    {
+      id: '1',
+      type: 'Pilates',
+      duration: 50,
+      notes: '',
+      color: 'purple'
+    },
+    {
+      id: '2', 
+      type: 'Correr',
+      duration: 30,
+      notes: '',
+      color: 'green'
+    },
+    {
+      id: '3',
+      type: 'Meditación',
+      duration: 15,
+      notes: '',
+      color: 'blue'
+    },
+    {
+      id: '4',
+      type: 'Lectura',
+      duration: 60,
+      notes: '',
+      color: 'orange'
+    }
+  ]
+
+  // Check and handle daily reset at 6 AM
+  const checkDailyReset = () => {
+    const lastResetDate = localStorage.getItem(`last_reset_${user.id}`)
+    const today = new Date().toDateString()
+    const currentHour = new Date().getHours()
+    
+    if (lastResetDate !== today && currentHour >= 6) {
+      // Limpiar actividades locales del día anterior
+      setActivities([])
+      localStorage.setItem(`activities_${user.id}`, '[]')
+      localStorage.setItem(`last_reset_${user.id}`, today)
+      console.log('Daily reset applied at 6 AM')
+    }
+  }
+
+  // Load activities with daily reset check
   const loadActivities = async () => {
     if (!user) return
 
     try {
       setLoading(true)
       
-      // Load from localStorage
+      // Check for daily reset first
+      checkDailyReset()
+      
+      // Load today's activities from localStorage (reset at 6 AM)
       const userActivities = JSON.parse(localStorage.getItem(`activities_${user.id}`) || '[]')
+      
+      // Load predefined activities from localStorage or use defaults
+      const userPredefined = JSON.parse(localStorage.getItem(`predefined_activities_${user.id}`) || 'null')
+      if (userPredefined) {
+        setPredefinedActivities(userPredefined)
+      } else {
+        setPredefinedActivities(defaultPredefinedActivities)
+        localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(defaultPredefinedActivities))
+      }
       
       setActivities(userActivities)
       setError(null)
@@ -28,28 +88,138 @@ export const useActivities = () => {
     }
   }
 
-  // Add activity (simplified version using local state)
+  // Save activity to Supabase for historical tracking
+  const saveToSupabase = async (activityData) => {
+    try {
+      const { data, error } = await supabase
+        .from('activity_history')
+        .insert({
+          user_id: user.id,
+          activity_type: activityData.type,
+          duration_minutes: parseInt(activityData.duration) || 0,
+          notes: activityData.notes || '',
+          activity_date: activityData.date || new Date().toISOString().split('T')[0],
+          activity_time: activityData.time || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      return { data, error: null }
+    } catch (error) {
+      console.error('Error saving to Supabase:', error)
+      return { data: null, error: error.message }
+    }
+  }
+
+  // Load historical data from Supabase
+  const loadHistoryFromSupabase = async (startDate, endDate) => {
+    try {
+      let query = supabase
+        .from('activity_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('activity_date', { ascending: false })
+        .order('activity_time', { ascending: false })
+
+      if (startDate) query = query.gte('activity_date', startDate)
+      if (endDate) query = query.lte('activity_date', endDate)
+
+      const { data, error } = await query
+
+      if (error) throw error
+      return { data: data || [], error: null }
+    } catch (error) {
+      console.error('Error loading history from Supabase:', error)
+      return { data: [], error: error.message }
+    }
+  }
+
+  // Get activity statistics by period
+  const getActivityStats = async (period = 'week') => {
+    try {
+      const today = new Date()
+      let startDate
+
+      switch (period) {
+        case 'day':
+          startDate = today.toISOString().split('T')[0]
+          break
+        case 'week':
+          const weekStart = new Date(today)
+          weekStart.setDate(today.getDate() - 7)
+          startDate = weekStart.toISOString().split('T')[0]
+          break
+        case 'month':
+          const monthStart = new Date(today)
+          monthStart.setDate(1)
+          startDate = monthStart.toISOString().split('T')[0]
+          break
+        default:
+          startDate = null
+      }
+
+      const { data: historyData } = await loadHistoryFromSupabase(startDate)
+      
+      const totalTime = historyData.reduce((sum, activity) => sum + activity.duration_minutes, 0)
+      const activityCount = historyData.length
+      
+      const typeStats = historyData.reduce((acc, activity) => {
+        const type = activity.activity_type
+        if (!acc[type]) {
+          acc[type] = { count: 0, totalTime: 0 }
+        }
+        acc[type].count++
+        acc[type].totalTime += activity.duration_minutes
+        return acc
+      }, {})
+
+      return {
+        totalTime,
+        activityCount,
+        typeStats,
+        period
+      }
+    } catch (error) {
+      console.error('Error getting activity stats:', error)
+      return {
+        totalTime: 0,
+        activityCount: 0,
+        typeStats: {},
+        period
+      }
+    }
+  }
+
+  // Add activity with dual storage (local + Supabase)
   const addActivity = async (activityData) => {
     if (!user) return { error: 'Usuario no autenticado' }
 
     try {
       // Create new activity with local data
       const newActivity = {
-        id: Date.now().toString(), // Simple ID generation
+        id: Date.now().toString(),
         type: activityData.type,
-        date: new Date().toDateString(),
+        date: activityData.date || new Date().toDateString(),
+        time: activityData.time || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
         notes: activityData.notes || '',
         duration: parseInt(activityData.duration) || 0,
         created_at: new Date().toISOString()
       }
 
-      // Add to local state
+      // Save to Supabase for historical tracking
+      const supabaseResult = await saveToSupabase(activityData)
+      if (supabaseResult.error) {
+        console.warn('Failed to save to Supabase, continuing with local save:', supabaseResult.error)
+      }
+
+      // Add to local state (for today's view)
       setActivities(prev => [newActivity, ...prev])
       
-      // Optionally save to localStorage for persistence
+      // Save to localStorage for persistence
       const userActivities = JSON.parse(localStorage.getItem(`activities_${user.id}`) || '[]')
       userActivities.unshift(newActivity)
-      localStorage.setItem(`activities_${user.id}`, JSON.stringify(userActivities.slice(0, 50))) // Keep only last 50
+      localStorage.setItem(`activities_${user.id}`, JSON.stringify(userActivities.slice(0, 50)))
 
       return { data: newActivity, error: null }
     } catch (err) {
@@ -183,6 +353,36 @@ export const useActivities = () => {
     }
   }, [user])
 
+  // Gestión de actividades predeterminadas
+  const addPredefinedActivity = (activityTemplate) => {
+    const newTemplate = {
+      id: Date.now().toString(),
+      ...activityTemplate
+    }
+    const updated = [...predefinedActivities, newTemplate]
+    setPredefinedActivities(updated)
+    localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(updated))
+    return { data: newTemplate, error: null }
+  }
+
+  const updatePredefinedActivity = (templateId, updates) => {
+    const updated = predefinedActivities.map(template => 
+      template.id === templateId 
+        ? { ...template, ...updates }
+        : template
+    )
+    setPredefinedActivities(updated)
+    localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(updated))
+    return { error: null }
+  }
+
+  const deletePredefinedActivity = (templateId) => {
+    const updated = predefinedActivities.filter(template => template.id !== templateId)
+    setPredefinedActivities(updated)
+    localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(updated))
+    return { error: null }
+  }
+
   const stats = getStats()
 
   return {
@@ -190,9 +390,16 @@ export const useActivities = () => {
     loading,
     error,
     stats,
+    predefinedActivities,
     addActivity,
     updateActivity,
     deleteActivity,
-    loadActivities
+    loadActivities,
+    addPredefinedActivity,
+    updatePredefinedActivity,
+    deletePredefinedActivity,
+    loadHistoryFromSupabase,
+    getActivityStats,
+    checkDailyReset
   }
 }

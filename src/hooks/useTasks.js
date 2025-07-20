@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from './useAuth'
+import { attachmentService } from '@/services/attachments'
 
 export const useTasks = () => {
   const { user } = useAuth()
@@ -22,21 +23,29 @@ export const useTasks = () => {
 
       if (error) throw error
 
-      // Map database fields to component expected format
-      const mappedTasks = data.map(task => ({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        notes: task.description, // alias for compatibility
-        completed: task.completed,
-        important: task.is_big_3_today, // Map Big 3 to important
-        addedAt: new Date(task.created_at),
-        deadline: task.deadline ? new Date(task.deadline) : null,
-        amount: task.amount,
-        link: task.link,
-        created_at: task.created_at,
-        updated_at: task.updated_at
-      }))
+      // Map database fields to component expected format and load attachments
+      const mappedTasks = await Promise.all(
+        data.map(async (task) => {
+          // Load attachments for each task
+          const { data: attachments } = await attachmentService.getTaskAttachments(task.id)
+          
+          return {
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            notes: task.description, // alias for compatibility
+            completed: task.completed,
+            important: task.is_big_3_today, // Map Big 3 to important
+            addedAt: new Date(task.created_at),
+            deadline: task.deadline ? new Date(task.deadline) : null,
+            amount: task.amount,
+            link: task.link,
+            created_at: task.created_at,
+            updated_at: task.updated_at,
+            attachments: attachments || []
+          }
+        })
+      )
 
       setTasks(mappedTasks)
       setError(null)
@@ -83,7 +92,8 @@ export const useTasks = () => {
         amount: data.amount,
         link: data.link,
         created_at: data.created_at,
-        updated_at: data.updated_at
+        updated_at: data.updated_at,
+        attachments: []
       }
 
       setTasks(prev => [newTask, ...prev])
@@ -167,6 +177,10 @@ export const useTasks = () => {
     if (!user) return { error: 'Usuario no autenticado' }
 
     try {
+      // First delete all attachments
+      await attachmentService.deleteTaskAttachments(taskId)
+
+      // Then delete the task
       const { error } = await supabase
         .from('tasks')
         .delete()
@@ -241,6 +255,81 @@ export const useTasks = () => {
     }
   }, [user])
 
+  // Add attachment to task
+  const addAttachment = async (taskId, attachmentData) => {
+    if (!user) return { error: 'Usuario no autenticado' }
+
+    try {
+      const result = await attachmentService.processAndCreateAttachment(
+        attachmentData, 
+        user.id, 
+        taskId
+      )
+
+      if (result.error) {
+        return { data: null, error: result.error }
+      }
+
+      // Update local state
+      setTasks(prev => prev.map(task => 
+        task.id === taskId 
+          ? { ...task, attachments: [...(task.attachments || []), result.data] }
+          : task
+      ))
+
+      return { data: result.data, error: null }
+    } catch (err) {
+      console.error('Error adding attachment:', err)
+      return { data: null, error: err.message }
+    }
+  }
+
+  // Delete attachment
+  const deleteAttachment = async (taskId, attachmentId) => {
+    if (!user) return { error: 'Usuario no autenticado' }
+
+    try {
+      const result = await attachmentService.deleteAttachment(attachmentId)
+      
+      if (result.error) {
+        return { error: result.error }
+      }
+
+      // Update local state
+      setTasks(prev => prev.map(task => 
+        task.id === taskId 
+          ? { 
+              ...task, 
+              attachments: (task.attachments || []).filter(att => att.id !== attachmentId) 
+            }
+          : task
+      ))
+
+      return { error: null }
+    } catch (err) {
+      console.error('Error deleting attachment:', err)
+      return { error: err.message }
+    }
+  }
+
+  // Reload task attachments
+  const reloadTaskAttachments = async (taskId) => {
+    try {
+      const { data: attachments } = await attachmentService.getTaskAttachments(taskId)
+      
+      setTasks(prev => prev.map(task => 
+        task.id === taskId 
+          ? { ...task, attachments: attachments || [] }
+          : task
+      ))
+
+      return { error: null }
+    } catch (err) {
+      console.error('Error reloading task attachments:', err)
+      return { error: err.message }
+    }
+  }
+
   // Computed values
   const importantTasks = tasks.filter(task => task.important && !task.completed)
   const routineTasks = tasks.filter(task => !task.important && !task.completed)
@@ -261,6 +350,9 @@ export const useTasks = () => {
     toggleBig3,
     deleteTask,
     setBig3Tasks,
-    loadTasks
+    loadTasks,
+    addAttachment,
+    deleteAttachment,
+    reloadTaskAttachments
   }
 }

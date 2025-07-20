@@ -166,15 +166,19 @@ const SmartAttachmentsPanel = ({
             <div className="flex gap-2">
               <BaseButton
                 onClick={() => {
-                  onAttach({
-                    type: 'image', 
-                    content: data.image,
-                    title: data.fileName,
-                    fileName: data.fileName,
-                    fileSize: data.fileSize
-                  })
-                  setActiveType(null)
-                  setData({})
+                  // Convertir el data URL de vuelta a File para el servicio
+                  fetch(data.image)
+                    .then(res => res.blob())
+                    .then(blob => {
+                      const file = new File([blob], data.fileName, { type: blob.type })
+                      onAttach({
+                        type: 'image', 
+                        title: data.fileName,
+                        file: file
+                      })
+                      setActiveType(null)
+                      setData({})
+                    })
                 }}
                 disabled={!data.image}
                 className="flex-1 bg-pink-600 hover:bg-pink-700"
@@ -230,16 +234,19 @@ const SmartAttachmentsPanel = ({
             <div className="flex gap-2">
               <BaseButton
                 onClick={() => {
-                  onAttach({
-                    type: 'document', 
-                    content: data.document,
-                    title: data.fileName,
-                    fileName: data.fileName,
-                    fileSize: data.fileSize,
-                    fileType: data.fileType
-                  })
-                  setActiveType(null)
-                  setData({})
+                  // Convertir el data URL de vuelta a File para el servicio
+                  fetch(data.document)
+                    .then(res => res.blob())
+                    .then(blob => {
+                      const file = new File([blob], data.fileName, { type: data.fileType })
+                      onAttach({
+                        type: 'document', 
+                        title: data.fileName,
+                        file: file
+                      })
+                      setActiveType(null)
+                      setData({})
+                    })
                 }}
                 disabled={!data.document}
                 className="flex-1 bg-orange-600 hover:bg-orange-700"

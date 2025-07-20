@@ -34,6 +34,7 @@ import SmartAttachmentsPanel from '@/components/attachments/SmartAttachmentsPane
 import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
 import TaskCard from '@/components/tasks/TaskCard'
 import BaseButton from '@/components/ui/BaseButton'
+import ActivitySettings from '@/components/activities/ActivitySettings'
 
 const TaskItApp = () => {
   const { user, signOut } = useAuth()
@@ -46,7 +47,10 @@ const TaskItApp = () => {
     updateTask, 
     toggleComplete, 
     toggleBig3,
-    deleteTask
+    deleteTask,
+    addAttachment,
+    deleteAttachment,
+    reloadTaskAttachments
   } = useTasks()
   const { 
     rituals, 
@@ -59,7 +63,14 @@ const TaskItApp = () => {
   const { 
     activities, 
     stats: activityStats, 
-    addActivity 
+    predefinedActivities,
+    addActivity,
+    addPredefinedActivity,
+    updatePredefinedActivity,
+    deletePredefinedActivity,
+    loadHistoryFromSupabase,
+    getActivityStats,
+    checkDailyReset
   } = useActivities()
 
   // Local state
@@ -74,7 +85,13 @@ const TaskItApp = () => {
   const [showTaskSelector, setShowTaskSelector] = useState(false)
   const [showRitualsConfig, setShowRitualsConfig] = useState(false)
   const [showActivityForm, setShowActivityForm] = useState(false)
-  const [newActivity, setNewActivity] = useState({ type: '', notes: '', duration: '' })
+  const [newActivity, setNewActivity] = useState({ 
+    type: '', 
+    notes: '', 
+    duration: '',
+    date: new Date().toISOString().split('T')[0],
+    time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  })
   
   // Smart Attachments state
   const [showAttachments, setShowAttachments] = useState(false)
@@ -91,6 +108,11 @@ const TaskItApp = () => {
   const [voiceSupported, setVoiceSupported] = useState(false)
 
   useEffect(() => {
+    // Check for daily reset when app loads
+    if (checkDailyReset) {
+      checkDailyReset()
+    }
+    
     // Check if browser supports speech recognition
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -260,9 +282,15 @@ const TaskItApp = () => {
   }
 
   const handleAddActivity = async () => {
-    if (newActivity.type.trim()) {
+    if (newActivity.type.trim() && newActivity.duration) {
       await addActivity(newActivity)
-      setNewActivity({ type: '', notes: '', duration: '' })
+      setNewActivity({ 
+        type: '', 
+        notes: '', 
+        duration: '',
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+      })
       setShowActivityForm(false)
     }
   }
@@ -284,16 +312,38 @@ const TaskItApp = () => {
   }
 
   // Conditional rendering for different views
+  if (currentView === 'activity-settings') {
+    return (
+      <ActivitySettings
+        predefinedActivities={predefinedActivities}
+        onBack={() => setCurrentView('main')}
+        onAddPredefined={addPredefinedActivity}
+        onUpdatePredefined={updatePredefinedActivity}
+        onDeletePredefined={deletePredefinedActivity}
+        getActivityStats={getActivityStats}
+        loadHistoryFromSupabase={loadHistoryFromSupabase}
+      />
+    )
+  }
+
   if (currentView === 'task-detail' && selectedTask) {
     return (
       <TaskDetailScreen 
         task={selectedTask}
         onBack={handleBackToMain}
         onToggleComplete={toggleTaskComplete}
+        onToggleImportant={async (taskId) => {
+          await toggleBig3(taskId)
+          const updatedTask = tasks.find(t => t.id === taskId)
+          if (updatedTask) setSelectedTask(updatedTask)
+        }}
         onUpdate={async (updatedTask) => {
           await updateTask(updatedTask.id, updatedTask)
           setSelectedTask(updatedTask)
         }}
+        onAddAttachment={addAttachment}
+        onDeleteAttachment={deleteAttachment}
+        onReloadAttachments={reloadTaskAttachments}
       />
     )
   }
@@ -600,50 +650,110 @@ const TaskItApp = () => {
               Actividades
               <span className="text-sm text-gray-500 font-normal">({activityStats.totalTimeToday} min hoy)</span>
             </h2>
-            <button
-              onClick={() => setShowActivityForm(!showActivityForm)}
-              className="px-3 py-1 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors"
-            >
-              + Añadir
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentView('activity-settings')}
+                className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+                title="Configurar actividades predeterminadas"
+              >
+                <Settings size={16} />
+              </button>
+              <button
+                onClick={() => setShowActivityForm(!showActivityForm)}
+                className="px-3 py-1 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors"
+              >
+                + Añadir
+              </button>
+            </div>
           </div>
 
           {/* Enhanced Activity Form */}
           {showActivityForm && (
-            <div className="mb-4 p-4 bg-white rounded-xl border border-gray-200">
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <input
-                  type="text"
-                  placeholder="Tipo de actividad..."
-                  value={newActivity.type}
-                  onChange={(e) => setNewActivity({...newActivity, type: e.target.value})}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-                <input
-                  type="number"
-                  placeholder="Duración (min)"
-                  value={newActivity.duration}
-                  onChange={(e) => setNewActivity({...newActivity, duration: e.target.value})}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            <div className="mb-4 p-4 bg-white rounded-xl border border-gray-200 space-y-4">
+              {/* Actividades Predeterminadas */}
+              {predefinedActivities.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Actividades rápidas:</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {predefinedActivities.map((template) => (
+                      <button
+                        key={template.id}
+                        onClick={() => {
+                          setNewActivity({
+                            ...newActivity,
+                            type: template.type,
+                            duration: template.duration.toString(),
+                            notes: template.notes
+                          })
+                        }}
+                        className={`p-3 rounded-lg border border-${template.color}-200 bg-${template.color}-50 hover:bg-${template.color}-100 transition-colors text-left`}
+                      >
+                        <div className={`text-sm font-medium text-${template.color}-800`}>
+                          {template.type}
+                        </div>
+                        <div className={`text-xs text-${template.color}-600`}>
+                          {template.duration} min
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Formulario Manual */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    placeholder="Tipo de actividad..."
+                    value={newActivity.type}
+                    onChange={(e) => setNewActivity({...newActivity, type: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Duración (min)"
+                    value={newActivity.duration}
+                    onChange={(e) => setNewActivity({...newActivity, duration: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="date"
+                    value={newActivity.date}
+                    onChange={(e) => setNewActivity({...newActivity, date: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
+                  />
+                  <input
+                    type="time"
+                    value={newActivity.time}
+                    onChange={(e) => setNewActivity({...newActivity, time: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
+                  />
+                </div>
+
+                <textarea
+                  placeholder="Notas (opcional)..."
+                  value={newActivity.notes}
+                  onChange={(e) => setNewActivity({...newActivity, notes: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  rows="2"
                 />
               </div>
-              <textarea
-                placeholder="Notas (opcional)..."
-                value={newActivity.notes}
-                onChange={(e) => setNewActivity({...newActivity, notes: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-green-500"
-                rows="2"
-              />
+
               <div className="flex gap-2">
                 <button
                   onClick={handleAddActivity}
-                  className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  disabled={!newActivity.type || !newActivity.duration}
+                  className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                 >
                   Guardar
                 </button>
                 <button
                   onClick={() => setShowActivityForm(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px]"
                 >
                   Cancelar
                 </button>
@@ -668,7 +778,10 @@ const TaskItApp = () => {
                         {activity.duration}min
                       </span>
                     )}
-                    <span className="text-xs text-gray-500">{activity.date}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span>📅 {activity.date}</span>
+                    {activity.time && <span>🕐 {activity.time}</span>}
                   </div>
                   {activity.notes && (
                     <p className="text-sm text-gray-600">{activity.notes}</p>

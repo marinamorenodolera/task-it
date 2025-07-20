@@ -6,7 +6,7 @@ import SmartAttachmentsPanel from '../attachments/SmartAttachmentsPanel'
 import { useGestures } from '@/hooks/useGestures'
 import { ArrowLeft, Edit3, Save, X, Plus, Trash2 } from 'lucide-react'
 
-const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant }) => {
+const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onAddAttachment, onDeleteAttachment, onReloadAttachments }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editedTask, setEditedTask] = useState(task)
   const [showAttachments, setShowAttachments] = useState(false)
@@ -18,6 +18,13 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     setEditedTask(task)
     setTaskAttachments(task.attachments || [])
   }, [task])
+
+  // Recargar attachments cuando cambie la tarea
+  React.useEffect(() => {
+    if (task.id && onReloadAttachments) {
+      onReloadAttachments(task.id)
+    }
+  }, [task.id, onReloadAttachments])
   
   const formatTaskDeadline = (deadlineISO) => {
     if (!deadlineISO) return null
@@ -31,20 +38,47 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     })
   }
 
-  const handleAddAttachment = (attachment) => {
-    setTaskAttachments(prev => [...prev, attachment])
-    setEditedTask(prev => ({
-      ...prev,
-      attachments: [...(prev.attachments || []), attachment]
-    }))
+  const handleAddAttachment = async (attachment) => {
+    if (onAddAttachment) {
+      const result = await onAddAttachment(task.id, attachment)
+      if (result.error) {
+        console.error('Error adding attachment:', result.error)
+        return
+      }
+      // Recargar attachments para obtener los datos actualizados de Supabase
+      if (onReloadAttachments) {
+        await onReloadAttachments(task.id)
+      }
+    } else {
+      // Fallback al comportamiento anterior (memoria local)
+      setTaskAttachments(prev => [...prev, attachment])
+      setEditedTask(prev => ({
+        ...prev,
+        attachments: [...(prev.attachments || []), attachment]
+      }))
+    }
   }
 
-  const handleRemoveAttachment = (index) => {
-    setTaskAttachments(prev => prev.filter((_, i) => i !== index))
-    setEditedTask(prev => ({
-      ...prev,
-      attachments: (prev.attachments || []).filter((_, i) => i !== index)
-    }))
+  const handleRemoveAttachment = async (index) => {
+    const attachment = taskAttachments[index]
+    if (attachment && attachment.id && onDeleteAttachment) {
+      const result = await onDeleteAttachment(task.id, attachment.id)
+      if (result.error) {
+        console.error('Error deleting attachment:', result.error)
+        return
+      }
+      // Recargar attachments
+      if (onReloadAttachments) {
+        await onReloadAttachments(task.id)
+      }
+    } else {
+      // Fallback al comportamiento anterior (memoria local)
+      setTaskAttachments(prev => prev.filter((_, i) => i !== index))
+      setEditedTask(prev => ({
+        ...prev,
+        attachments: (prev.attachments || []).filter((_, i) => i !== index)
+      }))
+    }
   }
 
   const handleDeadlineSet = (deadline) => {

@@ -120,34 +120,19 @@ export const useRituals = () => {
 
       if (ritualsError) throw ritualsError
 
-      // Load today's completions
-      const today = new Date().toDateString()
-      const { data: completionsData, error: completionsError } = await supabase
-        .from('ritual_completions')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('completed_at', new Date(today).toISOString())
-        .lt('completed_at', new Date(new Date(today).getTime() + 24 * 60 * 60 * 1000).toISOString())
-
-      if (completionsError) throw completionsError
-
-      // Merge rituals with completion status
+      // Simple ritual mapping without completion tracking for now
       const ritualsWithStatus = ritualsData.map(ritual => {
-        const completion = completionsData.find(c => c.ritual_id === ritual.id)
         const subtasks = ritual.subtasks || []
-
-        // Get completed subtasks from completion record
-        const completedSubtasks = completion?.completed_subtasks || []
 
         return {
           id: ritual.id,
           title: ritual.title,
           icon: ritual.icon,
-          completed: completion ? completion.is_completed : false,
+          completed: false, // Reset daily or on page load
           subtasks: subtasks.map(subtask => ({
             id: subtask.id,
             text: subtask.text || subtask.title, // Support both formats
-            completed: completedSubtasks.includes(subtask.id)
+            completed: false // Reset daily or on page load
           })),
           position_order: ritual.position_order,
           is_default: ritual.is_default
@@ -155,7 +140,7 @@ export const useRituals = () => {
       })
 
       setRituals(ritualsWithStatus)
-      setCompletions(completionsData)
+      setCompletions([])
       setError(null)
     } catch (err) {
       console.error('Error loading rituals:', err)
@@ -170,15 +155,13 @@ export const useRituals = () => {
     if (!user) return { error: 'Usuario no autenticado' }
 
     try {
-      const result = await supabase.rpc('toggle_ritual_completion', {
-        p_user_id: user.id,
-        p_ritual_id: ritualId
-      })
+      // Update local state optimistically first
+      setRituals(prev => prev.map(ritual => 
+        ritual.id === ritualId 
+          ? { ...ritual, completed: !ritual.completed }
+          : ritual
+      ))
 
-      if (result.error) throw result.error
-
-      // Reload to get updated status
-      await loadRituals()
       return { error: null }
     } catch (err) {
       console.error('Error toggling ritual:', err)
@@ -191,14 +174,6 @@ export const useRituals = () => {
     if (!user) return { error: 'Usuario no autenticado' }
 
     try {
-      const result = await supabase.rpc('toggle_ritual_subtask', {
-        p_user_id: user.id,
-        p_ritual_id: ritualId,
-        p_subtask_id: subtaskId
-      })
-
-      if (result.error) throw result.error
-
       // Update local state optimistically
       setRituals(prev => prev.map(ritual => 
         ritual.id === ritualId 
@@ -208,6 +183,10 @@ export const useRituals = () => {
                 subtask.id === subtaskId 
                   ? { ...subtask, completed: !subtask.completed }
                   : subtask
+              ),
+              // Auto-complete ritual if all subtasks are done
+              completed: ritual.subtasks.every(s => 
+                s.id === subtaskId ? !s.completed : s.completed
               )
             }
           : ritual
@@ -299,15 +278,7 @@ export const useRituals = () => {
     if (!user) return { error: 'Usuario no autenticado' }
 
     try {
-      // This will be called at 6:00 AM or manually
-      // Remove today's completions
-      const today = new Date().toDateString()
-      await supabase
-        .from('ritual_completions')
-        .delete()
-        .eq('user_id', user.id)
-        .gte('completed_at', new Date(today).toISOString())
-
+      // Simply reload rituals to reset completion status
       await loadRituals()
       return { error: null }
     } catch (err) {
@@ -384,7 +355,15 @@ export const useRituals = () => {
       const today = now.toDateString()
 
       if (lastReset !== today && now.getHours() >= 6) {
-        resetRituals()
+        // Reset all rituals to incomplete
+        setRituals(prev => prev.map(ritual => ({
+          ...ritual,
+          completed: false,
+          subtasks: ritual.subtasks.map(subtask => ({
+            ...subtask,
+            completed: false
+          }))
+        })))
         localStorage.setItem('lastRitualReset', today)
       }
     }

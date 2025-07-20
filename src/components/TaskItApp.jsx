@@ -30,6 +30,10 @@ import { parseNaturalLanguage, formatDeadline } from '@/utils/dateHelpers'
 import TaskSelector from '@/components/tasks/TaskSelector'
 import RitualsConfig from '@/components/rituals/RitualsConfig'
 import AuthScreen from '@/components/auth/AuthScreen'
+import SmartAttachmentsPanel from '@/components/attachments/SmartAttachmentsPanel'
+import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
+import TaskCard from '@/components/tasks/TaskCard'
+import BaseButton from '@/components/ui/BaseButton'
 
 const TaskItApp = () => {
   const { user, signOut } = useAuth()
@@ -70,6 +74,14 @@ const TaskItApp = () => {
   const [showRitualsConfig, setShowRitualsConfig] = useState(false)
   const [showActivityForm, setShowActivityForm] = useState(false)
   const [newActivity, setNewActivity] = useState({ type: '', notes: '', duration: '' })
+  
+  // Smart Attachments state
+  const [showAttachments, setShowAttachments] = useState(false)
+  const [attachments, setAttachments] = useState([])
+  const [taskDeadline, setTaskDeadline] = useState('')
+  const [currentView, setCurrentView] = useState('main')
+  const [showCompletedTasks, setShowCompletedTasks] = useState(true)
+  const [showAllCompleted, setShowAllCompleted] = useState(false)
 
   // Voice recognition setup
   const recognition = useRef(null)
@@ -106,6 +118,61 @@ const TaskItApp = () => {
   }, [])
 
   // Enhanced Quick Capture
+  // Attachment handlers
+  const handleAddAttachment = (attachment) => {
+    setAttachments(prev => [...prev, attachment])
+  }
+
+  const handleSetDeadline = (deadline) => {
+    setTaskDeadline(deadline)
+    // Auto close the attachments panel after setting deadline
+    setTimeout(() => {
+      const activeElement = document.activeElement
+      if (activeElement && activeElement.tagName !== 'INPUT') {
+        setShowAttachments(false)
+      }
+    }, 1000)
+  }
+
+  const handleTaskClick = (task) => {
+    setSelectedTask(task)
+    setCurrentView('task-detail')
+  }
+
+  const handleBackToMain = () => {
+    setCurrentView('main')
+    setSelectedTask(null)
+  }
+
+  const handleDeleteAllCompleted = async () => {
+    const confirmDelete = window.confirm('¿Estás seguro de que quieres borrar todas las tareas completadas? Esta acción no se puede deshacer.')
+    
+    if (confirmDelete) {
+      try {
+        // Separar rituales y tareas
+        const completedRituals = allCompletedItems.filter(item => item.subtasks)
+        const completedTasks = allCompletedItems.filter(item => !item.subtasks)
+        
+        // Eliminar tareas completadas
+        for (const task of completedTasks) {
+          await updateTask(task.id, { deleted: true })
+        }
+        
+        // Para rituales, marcarlos como no completados en lugar de eliminarlos
+        // (ya que los rituales se resetean diariamente)
+        for (const ritual of completedRituals) {
+          toggleRitual(ritual.id)
+        }
+        
+        // Opcional: Mostrar mensaje de éxito
+        console.log(`${completedTasks.length} tareas y ${completedRituals.length} rituales procesados`)
+      } catch (error) {
+        console.error('Error al eliminar tareas completadas:', error)
+        alert('Hubo un error al eliminar las tareas. Inténtalo de nuevo.')
+      }
+    }
+  }
+
   const addQuickTask = async () => {
     if (quickCapture.trim()) {
       const { deadline, amount } = parseNaturalLanguage(quickCapture)
@@ -124,6 +191,9 @@ const TaskItApp = () => {
       if (result.data) {
         setLastAddedTask(result.data.id)
         setQuickCapture('')
+        setShowAttachments(false)
+        setAttachments([])
+        setTaskDeadline('')
         setShowQuickOptions(true)
         
         // Ocultar opciones después de 5 segundos
@@ -191,11 +261,33 @@ const TaskItApp = () => {
     }
   }
 
-  const completedToday = tasks.filter(task => task.completed).length
+  // Calcular stats incluyendo todas las secciones (rituales + tareas)
+  const allTasks = [...importantTasks, ...routineTasks]
+  const totalTasks = allTasks.length + totalRituals
+  const completedTasks = allTasks.filter(task => task.completed).length + completedRituals
+  
+  // Para la nueva sección "Tareas Completadas" al final
+  const allCompletedItems = [
+    ...rituals.filter(ritual => ritual.completed),
+    ...importantTasks.filter(task => task.completed),
+    ...routineTasks.filter(task => task.completed)
+  ]
 
   // Show auth screen if not logged in
   if (!user) {
     return <AuthScreen />
+  }
+
+  // Conditional rendering for different views
+  if (currentView === 'task-detail' && selectedTask) {
+    return (
+      <TaskDetailScreen 
+        task={selectedTask}
+        onBack={handleBackToMain}
+        onEdit={() => setCurrentView('task-edit')}
+        onToggleComplete={toggleTaskComplete}
+      />
+    )
   }
 
   return (
@@ -228,18 +320,38 @@ const TaskItApp = () => {
               type="text"
               placeholder="Ej: Llamar cliente jueves 15:00 para proyecto..."
               value={quickCapture}
-              onChange={(e) => setQuickCapture(e.target.value)}
+              onChange={(e) => {
+                setQuickCapture(e.target.value)
+                if (e.target.value.trim() && !showAttachments) {
+                  setShowAttachments(true)
+                }
+              }}
+              onFocus={() => {
+                if (quickCapture.trim()) {
+                  setShowAttachments(true)
+                }
+              }}
               className="flex-1 min-h-[44px] touch-manipulation px-4 py-3 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               autoFocus
             />
-            <button
+            <BaseButton
               type="submit"
-              className="min-h-[44px] min-w-[44px] touch-manipulation px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 active:bg-blue-700 transition-colors flex items-center justify-center"
               title="Añadir tarea rápida"
+              disabled={!quickCapture.trim()}
             >
               <Plus size={20} />
-            </button>
+            </BaseButton>
           </form>
+
+          <SmartAttachmentsPanel
+            isOpen={showAttachments && quickCapture.trim()}
+            onClose={() => setShowAttachments(false)}
+            onAttach={handleAddAttachment}
+            onDeadlineSet={handleSetDeadline}
+            currentDeadline={taskDeadline}
+            taskText={quickCapture}
+            existingAttachments={attachments}
+          />
 
           {/* Quick Options para última tarea */}
           {showQuickOptions && lastAddedTask && (
@@ -280,24 +392,24 @@ const TaskItApp = () => {
           <button
             onClick={() => setShowTaskSelector(true)}
             disabled={big3Count >= 3}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
           >
             <Target size={16} />
-            <span className="text-sm font-medium">
-              Seleccionar Big 3 ({big3Count}/3)
+            <span className="text-xs sm:text-sm font-medium">
+              <span className="hidden sm:inline">Seleccionar </span>Big 3 ({big3Count}/3)
             </span>
           </button>
           
           <button
             onClick={isListening ? stopVoiceCapture : startVoiceCapture}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] rounded-lg transition-all touch-manipulation ${
               isListening 
                 ? 'bg-red-100 text-red-700 animate-pulse' 
                 : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
             }`}
           >
             {isListening ? <MicOff size={16} /> : <Mic size={16} />}
-            <span className="text-sm font-medium">
+            <span className="text-xs sm:text-sm font-medium">
               {isListening ? 'Escuchando...' : 'Voz'}
             </span>
           </button>
@@ -316,89 +428,59 @@ const TaskItApp = () => {
       </div>
 
       {/* Enhanced Stats */}
-      <div className="p-4 bg-white mx-4 mt-4 rounded-xl border border-gray-200">
-        <div className="grid grid-cols-4 gap-3 text-center">
+      <div className="p-3 sm:p-4 bg-white mx-3 sm:mx-4 mt-4 rounded-xl border border-gray-200">
+        <div className="grid grid-cols-4 gap-2 sm:gap-3 text-center">
           <div>
-            <div className="text-xl font-bold text-blue-600">{big3Count}</div>
-            <div className="text-xs text-gray-600">Big 3</div>
+            <div className="text-lg sm:text-xl font-bold text-blue-600">{totalTasks}</div>
+            <div className="text-xs text-gray-600">Total Tareas</div>
           </div>
           <div>
-            <div className="text-xl font-bold text-green-600">{completedToday}</div>
-            <div className="text-xs text-gray-600">Tareas</div>
+            <div className="text-lg sm:text-xl font-bold text-green-600">{completedTasks}</div>
+            <div className="text-xs text-gray-600">Tareas Hechas</div>
           </div>
           <div>
-            <div className="text-xl font-bold text-purple-600">{completedRituals}/{totalRituals}</div>
+            <div className="text-lg sm:text-xl font-bold text-purple-600">{completedRituals}/{totalRituals}</div>
             <div className="text-xs text-gray-600">Rituales</div>
           </div>
           <div>
-            <div className="text-xl font-bold text-orange-600">{activityStats.totalTimeToday}min</div>
+            <div className="text-lg sm:text-xl font-bold text-orange-600">{activityStats.totalTimeToday}min</div>
             <div className="text-xs text-gray-600">Actividad</div>
           </div>
         </div>
       </div>
 
       {/* Lista de Tareas */}
-      <div className="p-4 space-y-6">
+      <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
         
-        {/* Big 3 (Tareas Importantes) */}
-        {importantTasks.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <Star className="text-yellow-500" size={20} />
-              Big 3 ({importantTasks.length}/3)
-            </h2>
+        {/* Big 3 (Tareas Importantes) - PRIMERO (lo más importante) */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <Star className="text-yellow-500" size={20} />
+            Big 3 - Tareas Importantes ({importantTasks.length}/3)
+          </h2>
+          {importantTasks.length > 0 ? (
             <div className="space-y-2">
               {importantTasks.map((task) => (
-                <div
+                <TaskCard
                   key={task.id}
-                  className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-200 shadow-sm cursor-pointer"
-                  onClick={() => setSelectedTask(task)}
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleTaskComplete(task.id)
-                    }}
-                    className="text-gray-400 hover:text-green-500 transition-colors"
-                  >
-                    <Circle size={20} />
-                  </button>
-                  
-                  <div className="flex-1 min-w-0">
-                    <span className="text-base font-medium text-gray-900">{task.title}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      {task.deadline && (
-                        <span className="text-xs px-2 py-1 bg-red-50 text-red-700 rounded">
-                          {formatDeadline(task.deadline)}
-                        </span>
-                      )}
-                      {task.amount && (
-                        <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
-                          {task.amount}€
-                        </span>
-                      )}
-                      {task.link && (
-                        <ExternalLink size={12} className="text-blue-500" />
-                      )}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleTaskImportant(task.id)
-                    }}
-                    className="text-yellow-500 hover:text-gray-400 transition-colors"
-                  >
-                    <Star size={18} fill="currentColor" />
-                  </button>
-                </div>
+                  task={task}
+                  onClick={() => handleTaskClick(task)}
+                  onComplete={toggleTaskComplete}
+                />
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-6 text-gray-500">
+              <Star className="mx-auto mb-2 text-gray-300" size={32} />
+              <p className="text-sm">Aún no has seleccionado tus Big 3</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Marca tareas como importantes desde "Otras Tareas" o usa el botón "Seleccionar Big 3"
+              </p>
+            </div>
+          )}
+        </div>
 
-        {/* Daily Rituals */}
+        {/* Daily Rituals - SEGUNDO */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -480,62 +562,37 @@ const TaskItApp = () => {
           </div>
         </div>
 
-        {/* Tareas Rutina */}
-        {routineTasks.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">
-              Rutina ({routineTasks.length})
-            </h2>
+        {/* Otras Tareas - TERCERO (tareas no importantes creadas rápidas) */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">
+            Otras Tareas ({routineTasks.length})
+          </h2>
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas creadas rápidas. Selecciona las más importantes para Big 3.
+          </p>
+          {routineTasks.length > 0 ? (
             <div className="space-y-2">
               {routineTasks.map((task) => (
-                <div
+                <TaskCard
                   key={task.id}
-                  className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 cursor-pointer"
-                  onClick={() => setSelectedTask(task)}
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleTaskComplete(task.id)
-                    }}
-                    className="text-gray-400 hover:text-green-500 transition-colors"
-                  >
-                    <Circle size={18} />
-                  </button>
-                  
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm text-gray-700">{task.title}</span>
-                    {(task.deadline || task.amount || task.link) && (
-                      <div className="flex items-center gap-2 mt-1">
-                        {task.deadline && (
-                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
-                            {formatDeadline(task.deadline)}
-                          </span>
-                        )}
-                        {task.amount && (
-                          <span className="text-xs px-2 py-1 bg-green-50 text-green-700 rounded">
-                            {task.amount}€
-                          </span>
-                        )}
-                        {task.link && <ExternalLink size={12} className="text-blue-500" />}
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleTaskImportant(task.id)
-                    }}
-                    className="text-gray-300 hover:text-yellow-500 transition-colors"
-                  >
-                    <Star size={16} />
-                  </button>
-                </div>
+                  task={task}
+                  onClick={() => handleTaskClick(task)}
+                  onComplete={toggleTaskComplete}
+                />
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-6 text-gray-500">
+              <div className="mx-auto mb-2 w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                <span className="text-gray-400">📝</span>
+              </div>
+              <p className="text-sm">No tienes tareas rutinarias</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Crea tareas rápidas desde el campo de arriba
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Enhanced Activity Tracker */}
         <div>
@@ -623,88 +680,84 @@ const TaskItApp = () => {
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Task Detail Modal */}
-      {selectedTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Detalle de Tarea</h3>
+        {/* Tareas Completadas - AL FINAL */}
+        {allCompletedItems.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
               <button
-                onClick={() => setSelectedTask(null)}
-                className="p-1 text-gray-400 hover:text-gray-600"
+                onClick={() => setShowCompletedTasks(!showCompletedTasks)}
+                className="flex items-center gap-2 text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors"
               >
-                <X size={20} />
+                <CheckCircle2 className="text-green-500" size={20} />
+                Tareas Completadas ({allCompletedItems.length})
+                {showCompletedTasks ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+              
+              <button
+                onClick={handleDeleteAllCompleted}
+                className="text-blue-600 hover:text-blue-800 text-sm transition-colors"
+              >
+                Borrar todas
               </button>
             </div>
-            
-            <div className="p-4 space-y-4">
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">📌 Tarea:</h4>
-                <p className="text-gray-700">{selectedTask.title}</p>
-              </div>
 
-              {selectedTask.deadline && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">📅 Fecha límite:</h4>
-                  <p className="text-gray-700">{formatDeadline(selectedTask.deadline)}</p>
-                </div>
-              )}
-
-              {selectedTask.link && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">🔗 Link:</h4>
-                  <a 
-                    href={selectedTask.link} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            {showCompletedTasks && (
+              <div className="space-y-2">
+                {(showAllCompleted ? allCompletedItems : allCompletedItems.slice(0, 5)).map((item) => (
+                  <div
+                    key={item.id}
+                    className="opacity-70 hover:opacity-100 transition-opacity"
                   >
-                    <ExternalLink size={16} />
-                    Abrir enlace
-                  </a>
-                </div>
-              )}
-
-              {selectedTask.amount && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">💶 Importe:</h4>
-                  <p className="text-gray-700">{selectedTask.amount}€</p>
-                </div>
-              )}
-
-              {selectedTask.notes && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">📝 Notas:</h4>
-                  <p className="text-gray-700">{selectedTask.notes}</p>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-4">
-                <button
-                  onClick={() => {
-                    toggleTaskComplete(selectedTask.id)
-                    setSelectedTask(null)
-                  }}
-                  className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                >
-                  Marcar como completada
-                </button>
-                <button
-                  onClick={() => {
-                    toggleTaskImportant(selectedTask.id)
-                    setSelectedTask(null)
-                  }}
-                  className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
-                >
-                  <Star size={16} />
-                </button>
+                    {item.subtasks ? (
+                      // Es un ritual (tiene subtasks)
+                      <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-green-200 bg-green-50">
+                        <button
+                          onClick={() => toggleRitual(item.id)}
+                          className="text-green-500"
+                        >
+                          <CheckCircle2 size={18} />
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-green-700 line-through">
+                            {item.title}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      // Es una tarea
+                      <TaskCard
+                        task={item}
+                        onClick={() => handleTaskClick(item)}
+                        onComplete={toggleTaskComplete}
+                      />
+                    )}
+                  </div>
+                ))}
+                
+                {allCompletedItems.length > 5 && !showAllCompleted && (
+                  <button
+                    onClick={() => setShowAllCompleted(true)}
+                    className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    Ver más ({allCompletedItems.length - 5} restantes)
+                  </button>
+                )}
+                
+                {showAllCompleted && allCompletedItems.length > 5 && (
+                  <button
+                    onClick={() => setShowAllCompleted(false)}
+                    className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    Ver menos
+                  </button>
+                )}
               </div>
-            </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
 
       {/* Task Selector Modal */}
       {showTaskSelector && (
@@ -722,6 +775,121 @@ const TaskItApp = () => {
           isOpen={showRitualsConfig}
           onClose={() => setShowRitualsConfig(false)}
         />
+      )}
+
+      {/* Task Detail Modal */}
+      {selectedTask && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedTask(null)}
+        >
+          <div 
+            className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Detalles de tarea</h2>
+                <button
+                  onClick={() => setSelectedTask(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Task Title */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Título</label>
+                <p className="mt-1 text-base text-gray-900">{selectedTask.title}</p>
+              </div>
+
+              {/* Task Metadata */}
+              <div className="grid grid-cols-2 gap-4">
+                {selectedTask.deadline && (
+                  <div>
+                    <label className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <Calendar size={12} />
+                      Fecha límite
+                    </label>
+                    <p className="mt-1 text-sm text-gray-900">{formatDeadline(selectedTask.deadline)}</p>
+                  </div>
+                )}
+
+                {selectedTask.amount && (
+                  <div>
+                    <label className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <Euro size={12} />
+                      Importe
+                    </label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedTask.amount}€</p>
+                  </div>
+                )}
+
+                {selectedTask.link && (
+                  <div className="col-span-2">
+                    <label className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <Link size={12} />
+                      Enlace
+                    </label>
+                    <a
+                      href={selectedTask.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                    >
+                      {selectedTask.link}
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              {selectedTask.notes && (
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <MessageSquare size={12} />
+                    Notas
+                  </label>
+                  <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{selectedTask.notes}</p>
+                </div>
+              )}
+
+              {/* Status */}
+              <div className="flex items-center justify-between py-3 border-t border-gray-200">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-medium ${selectedTask.completed ? 'text-green-600' : 'text-gray-600'}`}>
+                    {selectedTask.completed ? 'Completada' : 'Pendiente'}
+                  </span>
+                  {selectedTask.important && (
+                    <span className="flex items-center gap-1 text-xs px-2 py-1 bg-yellow-50 text-yellow-700 rounded">
+                      <Star size={12} fill="currentColor" />
+                      Big 3
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      toggleTaskComplete(selectedTask.id)
+                      setSelectedTask({...selectedTask, completed: !selectedTask.completed})
+                    }}
+                    className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                      selectedTask.completed
+                        ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        : 'bg-green-500 text-white hover:bg-green-600'
+                    }`}
+                  >
+                    {selectedTask.completed ? 'Marcar pendiente' : 'Completar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -43,7 +43,9 @@ export const useActivities = () => {
 
   // Check and handle daily reset at 6 AM
   const checkDailyReset = () => {
-    const lastResetDate = localStorage.getItem(`last_reset_${user.id}`)
+    if (!user?.id) return // Safe check
+    
+    const lastResetDate = localStorage.getItem(`last_reset_${user?.id}`)
     const today = new Date().toDateString()
     const currentHour = new Date().getHours()
     
@@ -58,7 +60,10 @@ export const useActivities = () => {
 
   // Load activities with daily reset check
   const loadActivities = async () => {
-    if (!user) return
+    if (!user?.id) {
+      console.warn('User not available in loadActivities')
+      return
+    }
 
     try {
       setLoading(true)
@@ -90,6 +95,11 @@ export const useActivities = () => {
 
   // Save activity to Supabase for historical tracking
   const saveToSupabase = async (activityData) => {
+    if (!user?.id) {
+      console.warn('User not available in saveToSupabase')
+      return { data: null, error: 'User not authenticated' }
+    }
+    
     try {
       const { data, error } = await supabase
         .from('activity_history')
@@ -114,6 +124,11 @@ export const useActivities = () => {
 
   // Load historical data from Supabase
   const loadHistoryFromSupabase = async (startDate, endDate) => {
+    if (!user?.id) {
+      console.warn('User not available in loadHistoryFromSupabase')
+      return { data: [], error: 'User not authenticated' }
+    }
+    
     try {
       let query = supabase
         .from('activity_history')
@@ -193,7 +208,10 @@ export const useActivities = () => {
 
   // Add activity with dual storage (local + Supabase)
   const addActivity = async (activityData) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) {
+      console.warn('User not available in addActivity')
+      return { error: 'Usuario no autenticado' }
+    }
 
     try {
       // Create new activity with local data
@@ -230,7 +248,7 @@ export const useActivities = () => {
 
   // Update activity
   const updateActivity = async (activityId, updates) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // Map component format to database format
@@ -270,7 +288,7 @@ export const useActivities = () => {
 
   // Delete activity (simplified version)
   const deleteActivity = async (activityId) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // Update local state
@@ -327,7 +345,7 @@ export const useActivities = () => {
 
   // Setup real-time subscription
   useEffect(() => {
-    if (!user) return
+    if (!user?.id) return
 
     loadActivities()
 
@@ -355,6 +373,8 @@ export const useActivities = () => {
 
   // Gestión de actividades predeterminadas
   const addPredefinedActivity = (activityTemplate) => {
+    if (!user?.id) return { data: null, error: 'Usuario no autenticado' }
+    
     const newTemplate = {
       id: Date.now().toString(),
       ...activityTemplate
@@ -366,6 +386,8 @@ export const useActivities = () => {
   }
 
   const updatePredefinedActivity = (templateId, updates) => {
+    if (!user?.id) return { error: 'Usuario no autenticado' }
+    
     const updated = predefinedActivities.map(template => 
       template.id === templateId 
         ? { ...template, ...updates }
@@ -377,6 +399,8 @@ export const useActivities = () => {
   }
 
   const deletePredefinedActivity = (templateId) => {
+    if (!user?.id) return { error: 'Usuario no autenticado' }
+    
     const updated = predefinedActivities.filter(template => template.id !== templateId)
     setPredefinedActivities(updated)
     localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(updated))

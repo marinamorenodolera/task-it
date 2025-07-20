@@ -11,7 +11,10 @@ export const useTasks = () => {
 
   // Load tasks
   const loadTasks = async () => {
-    if (!user) return
+    if (!user?.id) {
+      console.warn('User not available in loadTasks')
+      return
+    }
 
     try {
       setLoading(true)
@@ -59,7 +62,7 @@ export const useTasks = () => {
 
   // Add task
   const addTask = async (taskData) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       const { data, error } = await supabase
@@ -106,7 +109,7 @@ export const useTasks = () => {
 
   // Update task
   const updateTask = async (taskId, updates) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // Map component format to database format
@@ -174,7 +177,7 @@ export const useTasks = () => {
 
   // Delete task
   const deleteTask = async (taskId) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // First delete all attachments
@@ -199,7 +202,7 @@ export const useTasks = () => {
 
   // Set Big 3 tasks (for task selector)
   const setBig3Tasks = async (taskIds) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // First, remove Big 3 from all tasks
@@ -228,7 +231,7 @@ export const useTasks = () => {
 
   // Setup real-time subscription
   useEffect(() => {
-    if (!user) return
+    if (!user?.id) return
 
     loadTasks()
 
@@ -257,7 +260,7 @@ export const useTasks = () => {
 
   // Add attachment to task
   const addAttachment = async (taskId, attachmentData) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       const result = await attachmentService.processAndCreateAttachment(
@@ -286,7 +289,7 @@ export const useTasks = () => {
 
   // Delete attachment
   const deleteAttachment = async (taskId, attachmentId) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       const result = await attachmentService.deleteAttachment(attachmentId)

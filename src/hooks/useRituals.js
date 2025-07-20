@@ -63,7 +63,7 @@ export const useRituals = () => {
 
   // Initialize default rituals for new users
   const initializeDefaultRituals = async () => {
-    if (!user) return
+    if (!user?.id) return
 
     try {
       // Check if user already has rituals
@@ -102,7 +102,10 @@ export const useRituals = () => {
 
   // Load rituals and today's completions
   const loadRituals = async () => {
-    if (!user) return
+    if (!user?.id) {
+      console.warn('User not available in loadRituals')
+      return
+    }
 
     try {
       setLoading(true)
@@ -152,7 +155,7 @@ export const useRituals = () => {
 
   // Toggle ritual completion
   const toggleRitual = async (ritualId) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // Update local state optimistically first
@@ -171,7 +174,7 @@ export const useRituals = () => {
 
   // Toggle subtask completion
   const toggleSubtask = async (ritualId, subtaskId) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // Update local state optimistically
@@ -201,7 +204,7 @@ export const useRituals = () => {
 
   // Add custom ritual
   const addRitual = async (ritualData) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       const { data, error } = await supabase
@@ -230,7 +233,7 @@ export const useRituals = () => {
 
   // Update ritual
   const updateRitual = async (ritualId, updates) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       const { data, error } = await supabase
@@ -253,7 +256,7 @@ export const useRituals = () => {
 
   // Delete ritual (only non-default)
   const deleteRitual = async (ritualId) => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       const { error } = await supabase
@@ -275,7 +278,7 @@ export const useRituals = () => {
 
   // Reset rituals (for new day)
   const resetRituals = async () => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // Simply reload rituals to reset completion status
@@ -289,7 +292,7 @@ export const useRituals = () => {
 
   // Restore default rituals (user option)
   const restoreDefaultRituals = async () => {
-    if (!user) return { error: 'Usuario no autenticado' }
+    if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
       // Delete existing rituals
@@ -327,7 +330,7 @@ export const useRituals = () => {
 
   // Setup real-time subscription and auto-reset
   useEffect(() => {
-    if (!user) return
+    if (!user?.id) return
 
     loadRituals()
 

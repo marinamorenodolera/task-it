@@ -8,32 +8,17 @@ export const useActivities = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Load activities
+  // Load activities (simplified version using localStorage)
   const loadActivities = async () => {
     if (!user) return
 
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('activities')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50) // Limit to recent activities
-
-      if (error) throw error
-
-      // Map to component format
-      const mappedActivities = data.map(activity => ({
-        id: activity.id,
-        type: activity.activity_type,
-        date: new Date(activity.created_at).toDateString(),
-        notes: activity.notes || '',
-        duration: activity.duration_minutes || 0,
-        created_at: activity.created_at
-      }))
-
-      setActivities(mappedActivities)
+      
+      // Load from localStorage
+      const userActivities = JSON.parse(localStorage.getItem(`activities_${user.id}`) || '[]')
+      
+      setActivities(userActivities)
       setError(null)
     } catch (err) {
       console.error('Error loading activities:', err)
@@ -43,35 +28,29 @@ export const useActivities = () => {
     }
   }
 
-  // Add activity
+  // Add activity (simplified version using local state)
   const addActivity = async (activityData) => {
     if (!user) return { error: 'Usuario no autenticado' }
 
     try {
-      const { data, error } = await supabase
-        .from('activities')
-        .insert({
-          user_id: user.id,
-          activity_type: activityData.type,
-          notes: activityData.notes || '',
-          duration_minutes: parseInt(activityData.duration) || 0
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      // Map to component format and add to state
+      // Create new activity with local data
       const newActivity = {
-        id: data.id,
-        type: data.activity_type,
-        date: new Date(data.created_at).toDateString(),
-        notes: data.notes || '',
-        duration: data.duration_minutes || 0,
-        created_at: data.created_at
+        id: Date.now().toString(), // Simple ID generation
+        type: activityData.type,
+        date: new Date().toDateString(),
+        notes: activityData.notes || '',
+        duration: parseInt(activityData.duration) || 0,
+        created_at: new Date().toISOString()
       }
 
+      // Add to local state
       setActivities(prev => [newActivity, ...prev])
+      
+      // Optionally save to localStorage for persistence
+      const userActivities = JSON.parse(localStorage.getItem(`activities_${user.id}`) || '[]')
+      userActivities.unshift(newActivity)
+      localStorage.setItem(`activities_${user.id}`, JSON.stringify(userActivities.slice(0, 50))) // Keep only last 50
+
       return { data: newActivity, error: null }
     } catch (err) {
       console.error('Error adding activity:', err)
@@ -119,20 +98,19 @@ export const useActivities = () => {
     }
   }
 
-  // Delete activity
+  // Delete activity (simplified version)
   const deleteActivity = async (activityId) => {
     if (!user) return { error: 'Usuario no autenticado' }
 
     try {
-      const { error } = await supabase
-        .from('activities')
-        .delete()
-        .eq('id', activityId)
-        .eq('user_id', user.id)
-
-      if (error) throw error
-
+      // Update local state
       setActivities(prev => prev.filter(activity => activity.id !== activityId))
+      
+      // Update localStorage
+      const userActivities = JSON.parse(localStorage.getItem(`activities_${user.id}`) || '[]')
+      const filteredActivities = userActivities.filter(activity => activity.id !== activityId)
+      localStorage.setItem(`activities_${user.id}`, JSON.stringify(filteredActivities))
+
       return { error: null }
     } catch (err) {
       console.error('Error deleting activity:', err)

@@ -45,7 +45,8 @@ const TaskItApp = () => {
     addTask, 
     updateTask, 
     toggleComplete, 
-    toggleBig3 
+    toggleBig3,
+    deleteTask
   } = useTasks()
   const { 
     rituals, 
@@ -82,6 +83,8 @@ const TaskItApp = () => {
   const [currentView, setCurrentView] = useState('main')
   const [showCompletedTasks, setShowCompletedTasks] = useState(true)
   const [showAllCompleted, setShowAllCompleted] = useState(false)
+  const [showTaskCreatedModal, setShowTaskCreatedModal] = useState(false)
+  const [createdTaskInfo, setCreatedTaskInfo] = useState(null)
 
   // Voice recognition setup
   const recognition = useRef(null)
@@ -153,9 +156,9 @@ const TaskItApp = () => {
         const completedRituals = allCompletedItems.filter(item => item.subtasks)
         const completedTasks = allCompletedItems.filter(item => !item.subtasks)
         
-        // Eliminar tareas completadas
+        // Eliminar tareas completadas usando deleteTask
         for (const task of completedTasks) {
-          await updateTask(task.id, { deleted: true })
+          await deleteTask(task.id)
         }
         
         // Para rituales, marcarlos como no completados en lugar de eliminarlos
@@ -164,8 +167,7 @@ const TaskItApp = () => {
           toggleRitual(ritual.id)
         }
         
-        // Opcional: Mostrar mensaje de éxito
-        console.log(`${completedTasks.length} tareas y ${completedRituals.length} rituales procesados`)
+        console.log(`${completedTasks.length} tareas eliminadas y ${completedRituals.length} rituales reseteados`)
       } catch (error) {
         console.error('Error al eliminar tareas completadas:', error)
         alert('Hubo un error al eliminar las tareas. Inténtalo de nuevo.')
@@ -189,18 +191,25 @@ const TaskItApp = () => {
       const result = await addTask(newTaskData)
       
       if (result.data) {
+        // Mostrar modal de éxito
+        setCreatedTaskInfo({
+          title: result.data.title,
+          id: result.data.id
+        })
+        setShowTaskCreatedModal(true)
+        
         setLastAddedTask(result.data.id)
         setQuickCapture('')
         setShowAttachments(false)
         setAttachments([])
         setTaskDeadline('')
-        setShowQuickOptions(true)
         
-        // Ocultar opciones después de 5 segundos
+        // Ocultar modal después de 3 segundos
         setTimeout(() => {
-          setShowQuickOptions(false)
+          setShowTaskCreatedModal(false)
+          setCreatedTaskInfo(null)
           setLastAddedTask(null)
-        }, 5000)
+        }, 3000)
       }
     }
   }
@@ -264,13 +273,12 @@ const TaskItApp = () => {
   // Calcular stats incluyendo todas las secciones (rituales + tareas)
   const allTasks = [...importantTasks, ...routineTasks]
   const totalTasks = allTasks.length + totalRituals
-  const completedTasks = allTasks.filter(task => task.completed).length + completedRituals
+  const completedTasksCount = tasks.filter(task => task.completed).length + completedRituals
   
   // Para la nueva sección "Tareas Completadas" al final
   const allCompletedItems = [
     ...rituals.filter(ritual => ritual.completed),
-    ...importantTasks.filter(task => task.completed),
-    ...routineTasks.filter(task => task.completed)
+    ...tasks.filter(task => task.completed)
   ]
 
   // Show auth screen if not logged in
@@ -435,7 +443,7 @@ const TaskItApp = () => {
             <div className="text-xs text-gray-600">Total Tareas</div>
           </div>
           <div>
-            <div className="text-lg sm:text-xl font-bold text-green-600">{completedTasks}</div>
+            <div className="text-lg sm:text-xl font-bold text-green-600">{completedTasksCount}</div>
             <div className="text-xs text-gray-600">Tareas Hechas</div>
           </div>
           <div>
@@ -470,12 +478,8 @@ const TaskItApp = () => {
               ))}
             </div>
           ) : (
-            <div className="text-center py-6 text-gray-500">
-              <Star className="mx-auto mb-2 text-gray-300" size={32} />
-              <p className="text-sm">Aún no has seleccionado tus Big 3</p>
-              <p className="text-xs text-gray-400 mt-1">
-                Marca tareas como importantes desde "Otras Tareas" o usa el botón "Seleccionar Big 3"
-              </p>
+            <div className="text-center py-4 text-gray-400">
+              <p className="text-sm">No hay tareas importantes seleccionadas</p>
             </div>
           )}
         </div>
@@ -582,14 +586,8 @@ const TaskItApp = () => {
               ))}
             </div>
           ) : (
-            <div className="text-center py-6 text-gray-500">
-              <div className="mx-auto mb-2 w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
-                <span className="text-gray-400">📝</span>
-              </div>
-              <p className="text-sm">No tienes tareas rutinarias</p>
-              <p className="text-xs text-gray-400 mt-1">
-                Crea tareas rápidas desde el campo de arriba
-              </p>
+            <div className="text-center py-4 text-gray-400">
+              <p className="text-sm">No hay tareas creadas</p>
             </div>
           )}
         </div>
@@ -887,6 +885,44 @@ const TaskItApp = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Tarea Creada */}
+      {showTaskCreatedModal && createdTaskInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 text-center shadow-xl animate-bounce">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">✅</span>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              ¡Tarea creada!
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              "{createdTaskInfo.title}" se ha añadido a <strong>Otras Tareas</strong>
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowTaskCreatedModal(false)
+                  setCreatedTaskInfo(null)
+                }}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => {
+                  toggleTaskImportant(createdTaskInfo.id)
+                  setShowTaskCreatedModal(false)
+                  setCreatedTaskInfo(null)
+                }}
+                className="flex-1 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+              >
+                ⭐ Marcar Big 3
+              </button>
             </div>
           </div>
         </div>

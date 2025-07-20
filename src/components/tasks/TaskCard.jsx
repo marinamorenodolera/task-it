@@ -1,8 +1,11 @@
-import React from 'react'
+import React, { useState } from 'react'
 import BaseCard from '../ui/BaseCard'
 import { Circle, CheckCircle2 } from 'lucide-react'
+import { useGestures } from '@/hooks/useGestures'
 
-const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant }) => {
+const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReorder }) => {
+  const [isBeingReordered, setIsBeingReordered] = useState(false)
+  const { handleTouchStart, handleTouchMove, handleTouchEnd } = useGestures()
   const hasAdditionalContent = () => {
     return (task.attachments && task.attachments.length > 0) || 
            (task.notes && task.notes.trim()) || 
@@ -26,15 +29,43 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant }) => {
     return `${dayNames[deadlineDate.getDay()]} ${deadlineDate.getDate()} ${monthNames[deadlineDate.getMonth()]}`
   }
 
+  const handleLongPress = () => {
+    setIsBeingReordered(true)
+    if (onReorder) {
+      onReorder(task.id, 'start')
+    }
+  }
+
+  const handleSwipeRight = () => {
+    if (onClick) {
+      onClick()
+    }
+  }
+
+  const handleTap = () => {
+    if (!isBeingReordered && onClick) {
+      onClick()
+    }
+  }
+
+  const handleCardClick = () => {
+    if (!isBeingReordered && onClick) {
+      onClick()
+    }
+  }
+
   return (
     <BaseCard
       variant="interactive"
-      onClick={onClick}
+      onClick={handleCardClick}
       className={`p-3 transition-all ${
         task.completed 
           ? 'border-green-200 bg-green-50' 
           : 'hover:border-purple-200 bg-white'
-      }`}
+      } ${isBeingReordered ? 'shadow-lg scale-105' : ''}`}
+      onTouchStart={(e) => handleTouchStart(e, handleLongPress)}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={(e) => handleTouchEnd(e, handleSwipeRight, null, handleTap)}
     >
       <div className="flex items-center gap-3">
         <button 

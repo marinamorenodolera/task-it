@@ -25,6 +25,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useTasks } from '@/hooks/useTasks'
 import { useRituals } from '@/hooks/useRituals'
 import { useActivities } from '@/hooks/useActivities'
+import { useNavigation } from '@/hooks/useNavigation'
 import { parseNaturalLanguage, formatDeadline } from '@/utils/dateHelpers'
 
 import TaskSelector from '@/components/tasks/TaskSelector'
@@ -37,6 +38,7 @@ import ActivitySettings from '@/components/activities/ActivitySettings'
 
 const TaskItApp = () => {
   const { user, loading, signOut } = useAuth()
+  const { registerNavigationCallback, unregisterNavigationCallback } = useNavigation()
   
   console.log('📱 TaskItApp - RENDER')
   console.log('👤 Usuario:', { 
@@ -187,6 +189,24 @@ const TaskItApp = () => {
       }
     }, 100)
   }
+
+  // Register navigation callback for intelligent Daily navigation
+  useEffect(() => {
+    const handleDailyNavigation = () => {
+      if (currentView === 'task-detail' || currentView === 'activity-settings') {
+        // Navigate back to main Daily view
+        setCurrentView('main')
+        setSelectedTask(null)
+      }
+      // If already on main view, do nothing
+    }
+
+    registerNavigationCallback('daily', handleDailyNavigation)
+
+    return () => {
+      unregisterNavigationCallback('daily')
+    }
+  }, [currentView, registerNavigationCallback, unregisterNavigationCallback])
 
   const handleDeleteAllCompleted = async () => {
     const confirmDelete = window.confirm('¿Estás seguro de que quieres borrar todas las tareas completadas? Esta acción no se puede deshacer.')

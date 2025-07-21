@@ -1,14 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 
 interface BottomNavigationProps {
   className?: string
+  onDailyNavigate?: () => void  // Optional callback to handle Daily navigation
 }
 
-const BottomNavigation = ({ className = '' }: BottomNavigationProps) => {
+const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationProps) => {
   const pathname = usePathname()
+  const router = useRouter()
 
   const tabs = [
     { 
@@ -53,6 +55,25 @@ const BottomNavigation = ({ className = '' }: BottomNavigationProps) => {
 
   const currentTab = getCurrentTab()
 
+  const handleDailyClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    
+    // If there's a callback provided, use it (for internal state navigation)
+    if (onDailyNavigate) {
+      onDailyNavigate()
+      return
+    }
+    
+    // Check if we're in a task detail view and need to navigate back
+    const isInTaskDetail = pathname.includes('/task/') || pathname.includes('/daily') && window.location.hash
+    
+    if (isInTaskDetail || pathname !== '/daily') {
+      // Navigate intelligently to Daily main
+      router.push('/daily')
+    }
+    // If already on Daily main, do nothing
+  }
+
   return (
     <nav 
       className={`fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-lg ${className}`}
@@ -64,6 +85,48 @@ const BottomNavigation = ({ className = '' }: BottomNavigationProps) => {
           {tabs.map((tab) => {
             const isActive = currentTab === tab.id
             
+            // Special handling for Daily tab with intelligent navigation
+            if (tab.id === 'daily') {
+              return (
+                <button
+                  key={tab.id}
+                  onClick={handleDailyClick}
+                  className={`
+                    relative flex flex-col items-center justify-center
+                    min-h-[60px] rounded-2xl transition-all duration-200
+                    touch-manipulation group
+                    ${isActive 
+                      ? 'text-blue-600' 
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:scale-95'
+                    }
+                  `}
+                  aria-label={`${tab.label} - ${tab.description}`}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    width="20" 
+                    height="20" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth={isActive ? "2.5" : "2"}
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    className={`mb-1 transition-all duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`}
+                    aria-hidden="true"
+                  >
+                    <path d={tab.iconPath} />
+                  </svg>
+                  
+                  <span className={`text-xs font-medium transition-all duration-200 ${isActive ? 'font-semibold' : ''}`}>
+                    {tab.label}
+                  </span>
+                </button>
+              )
+            }
+            
+            // Regular Link for other tabs
             return (
               <Link
                 key={tab.id}

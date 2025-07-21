@@ -3,7 +3,7 @@ import BaseCard from '../ui/BaseCard'
 import BaseButton from '../ui/BaseButton'
 import AttachmentItem from '../attachments/AttachmentItem'
 import { useGestures } from '@/hooks/useGestures'
-import { ArrowLeft, Edit3, Save, X, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, Star, StarOff, Calendar, Link, Euro, Clock, MapPin, FileText, User } from 'lucide-react'
 
 const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onAddAttachment, onDeleteAttachment, onReloadAttachments }) => {
   const [isEditing, setIsEditing] = useState(false)
@@ -13,6 +13,57 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   const [attachmentData, setAttachmentData] = useState({})
   const [taskAttachments, setTaskAttachments] = useState(task.attachments || [])
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useGestures()
+  
+  // Handle swipe right to go back
+  const handleSwipeRight = () => {
+    onBack()
+  }
+  
+  // Mouse drag support for desktop
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState(null)
+  const [dragOffset, setDragOffset] = useState(0)
+  const [showSwipeHint, setShowSwipeHint] = useState(false)
+  
+  const handleMouseDown = (e) => {
+    setIsDragging(true)
+    setDragStart({ x: e.clientX, y: e.clientY })
+  }
+  
+  const handleMouseMove = (e) => {
+    if (!isDragging || !dragStart) return
+    
+    const deltaX = e.clientX - dragStart.x
+    const deltaY = e.clientY - dragStart.y
+    
+    // Only track horizontal movement and prevent scroll
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      e.preventDefault()
+      setDragOffset(Math.max(0, deltaX)) // Only positive values (drag right)
+      
+      if (deltaX > 30) {
+        setShowSwipeHint(true)
+      }
+    }
+  }
+  
+  const handleMouseUp = (e) => {
+    if (!isDragging || !dragStart) return
+    
+    const deltaX = e.clientX - dragStart.x
+    const deltaY = e.clientY - dragStart.y
+    
+    // Check for horizontal drag right with minimum distance
+    if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 80) {
+      handleSwipeRight()
+    }
+    
+    // Reset states
+    setIsDragging(false)
+    setDragStart(null)
+    setDragOffset(0)
+    setShowSwipeHint(false)
+  }
 
   // Actualizar estados cuando cambie la tarea
   React.useEffect(() => {
@@ -20,12 +71,30 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     setTaskAttachments(task.attachments || [])
   }, [task])
 
+  // Mostrar/ocultar panel de attachments automáticamente cuando cambia modo edición
+  React.useEffect(() => {
+    if (isEditing) {
+      setShowAttachmentPanel(true)
+    } else {
+      setShowAttachmentPanel(false)
+      setSelectedAttachmentType(null)
+    }
+  }, [isEditing])
+
   // Recargar attachments cuando cambie la tarea
   React.useEffect(() => {
     if (task.id && onReloadAttachments) {
       onReloadAttachments(task.id)
     }
   }, [task.id, onReloadAttachments])
+
+  // Resetear scroll al cargar el componente (task details)
+  React.useEffect(() => {
+    // Scroll to top when component mounts
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0)
+    }
+  }, [])
 
   const attachmentTypes = [
     { id: 'image', label: 'Imagen', icon: '🖼️', color: 'pink' },
@@ -500,158 +569,235 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
   return (
     <div 
-      className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100"
-      onTouchStart={handleTouchStart}
+      className="min-h-screen bg-gray-50 relative overflow-hidden"
+      onTouchStart={(e) => handleTouchStart(e)}
       onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+      onTouchEnd={(e) => handleTouchEnd(e, handleSwipeRight)}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={() => {
+        setIsDragging(false)
+        setDragStart(null)
+        setDragOffset(0)
+        setShowSwipeHint(false)
+      }}
+      style={{ 
+        transform: `translateX(${Math.min(dragOffset * 0.3, 30)}px)`,
+        transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+      }}
     >
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="flex items-center justify-between p-4">
-          <button
-            onClick={onBack}
-            className="p-2 text-gray-600 hover:text-gray-800 rounded-lg transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          
-          <div className="flex items-center gap-2">
-            {!isEditing ? (
+      {/* Swipe hint indicator */}
+      {(showSwipeHint || dragOffset > 30) && (
+        <div 
+          className="absolute left-4 top-1/2 transform -translate-y-1/2 z-20 pointer-events-none"
+          style={{ 
+            opacity: Math.min(dragOffset / 80, 1),
+            transform: `translateY(-50%) translateX(${Math.min(dragOffset * 0.5, 40)}px)`
+          }}
+        >
+          <div className="bg-white/90 backdrop-blur rounded-full p-3 shadow-lg border">
+            <div className="flex items-center gap-2 text-blue-600">
+              <span className="text-sm font-medium">← Volver</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Header Modernizado */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => setIsEditing(true)}
-                className="p-2 text-gray-600 hover:text-blue-600 rounded-lg transition-colors"
+                onClick={onBack}
+                className="p-2.5 -ml-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all duration-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
-                <Edit3 size={20} />
+                <ArrowLeft size={22} />
               </button>
-            ) : (
-              <div className="flex gap-1">
+              <h1 className="text-lg font-semibold text-gray-900">Detalles de tarea</h1>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {!isEditing ? (
                 <button
-                  onClick={handleSave}
-                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  onClick={() => setIsEditing(true)}
+                  className="p-2.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all duration-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
-                  <Save size={20} />
+                  <Edit3 size={20} />
                 </button>
+              ) : (
                 <button
                   onClick={() => {
                     setIsEditing(false)
                     setEditedTask(task)
                   }}
-                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all duration-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
                   <X size={20} />
                 </button>
-              </div>
-            )}
-            
-            <button
-              onClick={() => onDelete(task.id)}
-              className="p-2 text-gray-400 hover:text-red-600 rounded-lg transition-colors"
-            >
-              <Trash2 size={20} />
-            </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="p-4">
-        <BaseCard className="p-3 sm:p-4 space-y-4 sm:space-y-6">
-          {/* Task Title and Details */}
-          <div className="space-y-3">
-            {isEditing ? (
-              <input
-                type="text"
-                value={editedTask.text}
-                onChange={(e) => setEditedTask({...editedTask, text: e.target.value})}
-                className="w-full text-lg font-semibold bg-transparent border-b-2 border-blue-200 focus:border-blue-500 outline-none pb-2"
-                placeholder="Título de la tarea..."
-              />
-            ) : (
-              <h1 className="text-lg font-semibold text-gray-900">{task.text}</h1>
-            )}
+      {/* Content Modernizado */}
+      <div className="p-4 max-w-2xl mx-auto">
+        {/* Action Buttons Modernizados */}
+        <div className="flex gap-3 mb-6">
+          <button
+            onClick={() => onToggleComplete(task.id)}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl transition-all duration-200 font-medium ${
+              task.completed
+                ? 'bg-gray-100 text-gray-500 border border-gray-200'
+                : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
+            }`}
+          >
+            {task.completed ? <CheckCircle size={20} /> : <Circle size={20} />}
+            <span className="text-sm">
+              {task.completed ? 'Completada' : 'Completar'}
+            </span>
+          </button>
+          
+          {task.important ? (
+            <button
+              onClick={() => onToggleImportant(task.id)}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-all duration-200 font-medium border border-yellow-200"
+            >
+              <StarOff size={20} />
+              <span className="text-sm">No Big 3</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => onToggleImportant(task.id)}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl bg-yellow-500 text-white hover:bg-yellow-600 transition-all duration-200 font-medium shadow-sm"
+            >
+              <Star size={20} />
+              <span className="text-sm">Big 3</span>
+            </button>
+          )}
+        </div>
 
-            {/* Task metadata */}
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              {deadline && (
-                <>
-                  <span>📅</span>
-                  <span>{deadline}</span>
-                </>
+        {/* Task Content Card */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-6 space-y-6">
+            {/* Task Title */}
+            <div>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editedTask.text}
+                  onChange={(e) => setEditedTask({...editedTask, text: e.target.value})}
+                  className="w-full text-2xl font-bold bg-transparent border-b-2 border-blue-200 focus:border-blue-500 outline-none pb-2 text-gray-900"
+                  placeholder="Título de la tarea..."
+                />
+              ) : (
+                <h1 className="text-2xl font-bold text-gray-900">{task.text}</h1>
               )}
             </div>
 
-            {/* Notes (solo si existen) */}
+            {/* Task Description - Mejorado */}
             {(task.notes || isEditing) && (
-              <>
+              <div>
                 {isEditing ? (
                   <textarea
                     value={editedTask.notes || ''}
                     onChange={(e) => setEditedTask({...editedTask, notes: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] resize-none text-sm"
-                    placeholder="Añade notas sobre esta tarea..."
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px] resize-none text-base"
+                    placeholder="Añade una descripción..."
                   />
-                ) : (
-                  <p className="text-gray-600 text-sm leading-relaxed">{task.notes}</p>
+                ) : task.notes && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
+                    <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                      <FileText size={16} />
+                      Descripción
+                    </h3>
+                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{task.notes}</p>
+                  </div>
                 )}
-              </>
+              </div>
             )}
-          </div>
 
-          {/* Creation date */}
-          <div className="text-xs text-gray-500 text-center">
-            Creada el {new Date(task.created_at || Date.now()).toLocaleDateString('es-ES', {
-              year: 'numeric',
-              month: 'long', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex gap-2 pb-6">
-            <button
-              onClick={() => onToggleComplete(task.id)}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-lg transition-all touch-manipulation ${
-                task.completed
-                  ? 'bg-gray-100 text-gray-500'
-                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-              }`}
-            >
-              <span className="text-sm">✓</span>
-              <span className="text-xs sm:text-sm font-medium">
-                {task.completed ? 'Completada' : 'Completar'}
-              </span>
-            </button>
-            <button
-              onClick={() => onToggleImportant(task.id)}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-lg transition-all touch-manipulation ${
-                task.important
-                  ? 'bg-yellow-200 text-yellow-800 hover:bg-yellow-300'
-                  : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-              }`}
-            >
-              <span className="text-sm">⭐</span>
-              <span className="text-xs sm:text-sm font-medium">
-                {task.important ? 'Importante' : 'Big 3'}
-              </span>
-            </button>
-          </div>
-
-          {/* Attachments */}
-          <div className="border-t pt-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                📎 Adjuntos ({taskAttachments.length})
-              </h3>
-              <button
-                onClick={() => setShowAttachmentPanel(!showAttachmentPanel)}
-                className="flex items-center gap-2 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              >
-                <Plus size={16} />
-                <span>Añadir</span>
-              </button>
+            {/* Metadata Cards */}
+            <div className="grid grid-cols-2 gap-3">
+              {deadline && (
+                <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-orange-700">
+                    <Calendar size={18} />
+                    <div>
+                      <p className="text-xs font-medium text-orange-600">Fecha límite</p>
+                      <p className="text-sm font-semibold">{deadline}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {task.amount && (
+                <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-green-700">
+                    <Euro size={18} />
+                    <div>
+                      <p className="text-xs font-medium text-green-600">Importe</p>
+                      <p className="text-sm font-semibold">{task.amount}€</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {task.link && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 col-span-2">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Link size={18} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-blue-600">Enlace</p>
+                      <a 
+                        href={task.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm font-semibold hover:underline truncate block"
+                      >
+                        {task.link}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Creation Date */}
+            <div className="text-center pt-4 border-t border-gray-100">
+              <p className="text-sm text-gray-500">
+                Creada el {new Date(task.created_at || Date.now()).toLocaleDateString('es-ES', {
+                  year: 'numeric',
+                  month: 'long', 
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Attachments Section */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-4">
+          <div className="p-6">
+            {/* Solo mostrar header y botón si NO está editando */}
+            {!isEditing && (
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  📎 Adjuntos ({taskAttachments.length})
+                </h3>
+                <button
+                  onClick={() => setShowAttachmentPanel(!showAttachmentPanel)}
+                  className="flex items-center gap-2 px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  <Plus size={16} />
+                  <span>Añadir</span>
+                </button>
+              </div>
+            )}
 
             {/* Attachment Panel que se despliega */}
             {showAttachmentPanel && (
@@ -661,12 +807,15 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                     <span className="text-blue-600">📎</span>
                     <span className="font-medium text-blue-900 text-sm sm:text-base">Añadir a tu tarea:</span>
                   </div>
-                  <button 
-                    onClick={() => setShowAttachmentPanel(false)}
-                    className="p-1 text-blue-400 hover:text-blue-600 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
-                  >
-                    ✕
-                  </button>
+                  {/* Solo mostrar botón cerrar si NO está editando */}
+                  {!isEditing && (
+                    <button 
+                      onClick={() => setShowAttachmentPanel(false)}
+                      className="p-1 text-blue-400 hover:text-blue-600 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
 
                 {!selectedAttachmentType ? (
@@ -761,7 +910,34 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               </p>
             )}
           </div>
-        </BaseCard>
+        </div>
+
+        {/* Botones de acción cuando está editando */}
+        {isEditing && (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-4 p-4">
+            <button
+              onClick={handleSave}
+              className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium min-h-[44px]"
+            >
+              Guardar cambios
+            </button>
+          </div>
+        )}
+
+        {/* Botón de eliminar tarea */}
+        <div className="mt-8">
+          <button
+            onClick={() => {
+              const confirmDelete = window.confirm('¿Estás seguro de que quieres eliminar esta tarea? Esta acción no se puede deshacer.')
+              if (confirmDelete) {
+                onDelete(task.id)
+              }
+            }}
+            className="w-full py-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors font-medium min-h-[44px] border border-red-200"
+          >
+            Eliminar tarea
+          </button>
+        </div>
       </div>
     </div>
   )

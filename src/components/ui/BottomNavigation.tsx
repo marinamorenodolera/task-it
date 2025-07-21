@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useAuth } from '@/hooks/useAuth'
 
 interface BottomNavigationProps {
   className?: string
@@ -10,12 +9,6 @@ interface BottomNavigationProps {
 
 const BottomNavigation = ({ className = '' }: BottomNavigationProps) => {
   const pathname = usePathname()
-  const { user, loading } = useAuth()
-
-  // Only show navigation if user is authenticated and not loading
-  if (loading || !user) {
-    return null
-  }
 
   const tabs = [
     { 
@@ -53,15 +46,15 @@ const BottomNavigation = ({ className = '' }: BottomNavigationProps) => {
     if (pathname.startsWith('/daily')) return 'daily'
     if (pathname.startsWith('/weekly')) return 'weekly'
     if (pathname.startsWith('/settings')) return 'settings'
-    if (pathname === '/') return 'daily' // Root redirects to daily
-    return 'daily' // default
+    if (pathname === '/') return 'daily'
+    return 'daily'
   }
 
   const currentTab = getCurrentTab()
 
   return (
     <nav 
-      className={`fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-200 h-20 md:hidden bottom-nav ${className}`}
+      className={`fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-200 h-20 bottom-nav ${className}`}
       role="navigation"
       aria-label="Navegación principal"
     >
@@ -75,7 +68,7 @@ const BottomNavigation = ({ className = '' }: BottomNavigationProps) => {
               href={tab.href as any}
               className={`
                 flex flex-col items-center justify-center 
-                touch-target h-full mobile-optimized
+                min-h-[44px] min-w-[44px] h-full
                 transition-all duration-200 ease-in-out relative
                 ${isActive 
                   ? 'text-blue-600' 

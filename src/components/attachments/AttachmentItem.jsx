@@ -30,24 +30,26 @@ const AttachmentItem = ({ attachment }) => {
     return colors[type] || 'gray'
   }
 
-  const color = getAttachmentColor(attachment.type)
-  const icon = getAttachmentIcon(attachment.type)
+  // Determinar tipo basado en file_type
+  const attachmentType = attachment.file_type?.startsWith('image/') ? 'image' : 'document'
+  const color = getAttachmentColor(attachmentType)
+  const icon = getAttachmentIcon(attachmentType)
 
   return (
     <>
       <div className={`flex items-center gap-3 p-3 bg-${color}-50 border border-${color}-200 rounded-lg min-h-[60px]`}>
         {/* Previsualización de imagen */}
-        {attachment.type === 'image' && attachment.content && (
+        {attachmentType === 'image' && attachment.fileUrl && (
           <img 
-            src={attachment.content}
-            alt={attachment.title}
+            src={attachment.fileUrl}
+            alt={attachment.file_name}
             className="w-12 h-12 object-cover rounded-lg border border-pink-200 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
             onClick={() => setShowImageViewer(true)}
           />
         )}
         
         {/* Icono para otros tipos */}
-        {attachment.type !== 'image' && (
+        {attachmentType !== 'image' && (
           <span className={`text-${color}-600 flex-shrink-0 text-lg`}>
             {icon}
           </span>
@@ -55,28 +57,17 @@ const AttachmentItem = ({ attachment }) => {
         
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-medium text-${color}-800 truncate`}>
-            {attachment.title}
+            {attachment.file_name}
           </p>
-          {attachment.type === 'image' && attachment.fileSize && (
+          {attachment.file_size && (
             <p className="text-xs text-gray-500">
-              {(attachment.fileSize / 1024 / 1024).toFixed(1)} MB
+              {attachment.file_type} • {(attachment.file_size / 1024 / 1024).toFixed(1)} MB
             </p>
-          )}
-          {attachment.type === 'document' && attachment.fileSize && (
-            <p className="text-xs text-gray-500">
-              {attachment.fileType} • {(attachment.fileSize / 1024 / 1024).toFixed(1)} MB
-            </p>
-          )}
-          {attachment.type === 'contact' && attachment.phone && (
-            <p className="text-xs text-gray-500">{attachment.phone}</p>
-          )}
-          {attachment.type === 'amount' && (
-            <p className="text-xs text-gray-500">{attachment.content}</p>
           )}
         </div>
         
         {/* Botones de acción */}
-        {attachment.type === 'image' && (
+        {attachmentType === 'image' && (
           <button
             onClick={() => setShowImageViewer(true)}
             className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
@@ -85,13 +76,24 @@ const AttachmentItem = ({ attachment }) => {
           </button>
         )}
         
-        {attachment.type === 'document' && (
+        {attachmentType === 'document' && (
           <button
             onClick={() => setShowDocumentViewer(true)}
             className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
           >
             📖
           </button>
+        )}
+        
+        {/* Botón de descarga para todos los archivos */}
+        {attachment.fileUrl && (
+          <a
+            href={attachment.fileUrl}
+            download={attachment.file_name}
+            className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
+          >
+            ⬇️
+          </a>
         )}
         
         {attachment.type === 'link' && (

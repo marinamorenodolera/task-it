@@ -31,10 +31,28 @@ const BaseButton = ({
 
   const finalClassName = `${baseClasses} ${variants[variant]} ${sizes[size]} ${disabledClasses} ${className}`
 
+  const handleClick = (e) => {
+    if (disabled) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    if (onClick) {
+      onClick(e)
+    }
+  }
+
   return (
     <button 
       className={finalClassName}
-      onClick={disabled ? undefined : onClick}
+      onClick={handleClick}
+      onTouchStart={(e) => {
+        // Prevent iOS double-tap zoom
+        e.currentTarget.style.transform = 'scale(0.95)'
+      }}
+      onTouchEnd={(e) => {
+        e.currentTarget.style.transform = 'scale(1)'
+      }}
       disabled={disabled}
       {...props}
     >

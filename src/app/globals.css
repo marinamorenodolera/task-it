@@ -114,6 +114,56 @@
     font-size: 16px; /* Prevents zoom on iOS */
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* Optimize button interactions for mobile */
+  button {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  /* Fix button click issues on iOS */
+  button:active {
+    transform: scale(0.98);
+  }
+
+  /* Ensure forms work properly on mobile */
+  form button[type="submit"] {
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+  }
+
+  /* Task completion animations */
+  .fade-complete {
+    animation: fadeOut 1s ease-out forwards;
+  }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0.6; transform: scale(0.95); }
+}
+
+/* Animación sutil de desaparición hacia completadas */
+@keyframes subtleSlideToCompleted {
+  0% { 
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: translateY(8px) scale(0.98);
+    opacity: 0.6;
+  }
+  100% { 
+    transform: translateY(16px) scale(0.95);
+    opacity: 0;
+  }
+}
+
+.animate-subtleSlideToCompleted {
+  animation: subtleSlideToCompleted 300ms ease-in forwards;
 }
 
 /* TABLET ADJUSTMENTS */

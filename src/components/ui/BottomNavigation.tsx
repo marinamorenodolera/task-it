@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
 
 interface BottomNavigationProps {
   className?: string
@@ -9,6 +10,12 @@ interface BottomNavigationProps {
 
 const BottomNavigation = ({ className = '' }: BottomNavigationProps) => {
   const pathname = usePathname()
+  const { user, loading } = useAuth()
+
+  // Only show navigation if user is authenticated and not loading
+  if (loading || !user) {
+    return null
+  }
 
   const tabs = [
     { 

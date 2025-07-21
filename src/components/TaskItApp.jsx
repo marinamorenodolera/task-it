@@ -29,7 +29,6 @@ import { parseNaturalLanguage, formatDeadline } from '@/utils/dateHelpers'
 
 import TaskSelector from '@/components/tasks/TaskSelector'
 import RitualsConfig from '@/components/rituals/RitualsConfig'
-import AuthScreen from '@/components/auth/AuthScreen'
 import SmartAttachmentsPanel from '@/components/attachments/SmartAttachmentsPanel'
 import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
 import TaskCard from '@/components/tasks/TaskCard'
@@ -37,7 +36,15 @@ import BaseButton from '@/components/ui/BaseButton'
 import ActivitySettings from '@/components/activities/ActivitySettings'
 
 const TaskItApp = () => {
-  const { user, signOut } = useAuth()
+  const { user, loading, signOut } = useAuth()
+  
+  console.log('📱 TaskItApp - RENDER')
+  console.log('👤 Usuario:', { 
+    exists: !!user, 
+    email: user?.email, 
+    id: user?.id?.substring(0, 8) + '...',
+    loading 
+  })
   const { 
     tasks, 
     importantTasks, 
@@ -98,6 +105,7 @@ const TaskItApp = () => {
   const [attachments, setAttachments] = useState([])
   const [taskDeadline, setTaskDeadline] = useState('')
   const [currentView, setCurrentView] = useState('main')
+  const [shouldAutoFocus, setShouldAutoFocus] = useState(false)
   const [showCompletedTasks, setShowCompletedTasks] = useState(true)
   const [showAllCompleted, setShowAllCompleted] = useState(false)
   const [showTaskCreatedModal, setShowTaskCreatedModal] = useState(false)
@@ -144,7 +152,9 @@ const TaskItApp = () => {
 
   // Enhanced Quick Capture
   // Attachment handlers
-  const handleAddAttachment = (attachment) => {
+  const handleAddAttachment = async (attachment) => {
+    // Durante la creación de tarea, solo guardar en estado local
+    // Los archivos se procesarán cuando se cree la tarea en addQuickTask
     setAttachments(prev => [...prev, attachment])
   }
 
@@ -167,6 +177,15 @@ const TaskItApp = () => {
   const handleBackToMain = () => {
     setCurrentView('main')
     setSelectedTask(null)
+    setShouldAutoFocus(false) // No mostrar teclado al volver de TaskDetail
+    
+    // Asegurar que el input no tenga focus
+    setTimeout(() => {
+      const activeElement = document.activeElement
+      if (activeElement && activeElement.tagName === 'INPUT') {
+        activeElement.blur()
+      }
+    }, 100)
   }
 
   const handleDeleteAllCompleted = async () => {
@@ -210,6 +229,18 @@ const TaskItApp = () => {
       const result = await addTask(newTaskData)
       
       if (result.data) {
+        // Procesar attachments con archivos si existen
+        const fileAttachments = attachments.filter(att => att.file)
+        if (fileAttachments.length > 0) {
+          for (const attachment of fileAttachments) {
+            try {
+              await addAttachment(result.data.id, attachment)
+            } catch (error) {
+              console.error('Error subiendo attachment:', error)
+            }
+          }
+        }
+
         // Mostrar modal de éxito
         setCreatedTaskInfo({
           title: result.data.title,
@@ -222,6 +253,7 @@ const TaskItApp = () => {
         setShowAttachments(false)
         setAttachments([])
         setTaskDeadline('')
+        setShouldAutoFocus(false) // Resetear autoFocus después de crear tarea
         
         // Ocultar modal después de 1.5 segundos
         setTimeout(() => {
@@ -265,7 +297,14 @@ const TaskItApp = () => {
   }
 
   const toggleTaskComplete = async (id) => {
-    await toggleComplete(id)
+    try {
+      const result = await toggleComplete(id)
+      if (result?.error) {
+        alert('Error al actualizar tarea: ' + result.error)
+      }
+    } catch (error) {
+      alert('Error inesperado: ' + error.message)
+    }
   }
 
   const toggleTaskImportant = async (id) => {
@@ -296,20 +335,20 @@ const TaskItApp = () => {
   }
 
   // Calcular stats incluyendo todas las secciones (rituales + tareas)
-  const allTasks = [...importantTasks, ...routineTasks]
-  const totalTasks = allTasks.length + totalRituals
-  const completedTasksCount = tasks.filter(task => task.completed).length + completedRituals
+  // Solo contamos tareas activas (no eliminadas, ya que tasks viene del hook filtrado)
+  const activeTasks = tasks.filter(task => !task.completed) // Tareas pendientes
+  const completedTasksOnly = tasks.filter(task => task.completed) // Tareas completadas
+  const totalTasks = activeTasks.length + totalRituals // Total de tareas pendientes + rituales
+  const completedTasksCount = completedTasksOnly.length + completedRituals // Completadas + rituales completados
   
   // Para la nueva sección "Tareas Completadas" al final
   const allCompletedItems = [
     ...rituals.filter(ritual => ritual.completed),
-    ...tasks.filter(task => task.completed)
+    ...completedTasksOnly
   ]
 
-  // Show auth screen if not logged in
-  if (!user) {
-    return <AuthScreen />
-  }
+  // Auth is now handled globally by AuthGuard - TaskItApp only renders when authenticated
+  console.log('✅ TaskItApp - Renderizando (auth manejado globalmente por AuthGuard)')
 
   // Conditional rendering for different views
   if (currentView === 'activity-settings') {
@@ -331,6 +370,12 @@ const TaskItApp = () => {
       <TaskDetailScreen 
         task={selectedTask}
         onBack={handleBackToMain}
+        onDelete={async (taskId) => {
+          const result = await deleteTask(taskId)
+          if (!result.error) {
+            handleBackToMain()
+          }
+        }}
         onToggleComplete={toggleTaskComplete}
         onToggleImportant={async (taskId) => {
           await toggleBig3(taskId)
@@ -373,7 +418,14 @@ const TaskItApp = () => {
         
         {/* Enhanced Quick Capture */}
         <div className="space-y-3">
-          <form onSubmit={(e) => { e.preventDefault(); addQuickTask(); }} className="flex gap-2">
+          <form 
+            onSubmit={(e) => { 
+              e.preventDefault(); 
+              e.stopPropagation();
+              addQuickTask(); 
+            }} 
+            className="flex gap-2"
+          >
             <input
               type="text"
               placeholder="Ej: Llamar cliente jueves 15:00 para proyecto..."
@@ -385,17 +437,28 @@ const TaskItApp = () => {
                 }
               }}
               onFocus={() => {
+                setShouldAutoFocus(true) // Usuario quiere crear tarea
                 if (quickCapture.trim()) {
                   setShowAttachments(true)
                 }
               }}
+              onClick={() => {
+                setShouldAutoFocus(true) // Usuario hace click para crear tarea
+              }}
               className="flex-1 min-h-[44px] touch-manipulation px-4 py-3 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              autoFocus
+              autoFocus={shouldAutoFocus}
             />
             <BaseButton
               type="submit"
               title="Añadir tarea rápida"
               disabled={!quickCapture.trim()}
+              onClick={(e) => {
+                // Fallback para móvil si el submit no funciona
+                if (e.type === 'click') {
+                  e.preventDefault();
+                  addQuickTask();
+                }
+              }}
             >
               <Plus size={20} />
             </BaseButton>
@@ -454,7 +517,7 @@ const TaskItApp = () => {
           >
             <Target size={16} />
             <span className="text-xs sm:text-sm font-medium">
-              <span className="hidden sm:inline">Seleccionar </span>Big 3 ({big3Count}/3)
+              <span className="hidden sm:inline">Seleccionar </span>Big 3
             </span>
           </button>
           
@@ -1005,8 +1068,8 @@ const TaskItApp = () => {
 
       {/* Notificación sutil de Tarea Creada */}
       {showTaskCreatedModal && createdTaskInfo && (
-        <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 max-w-sm">
+        <div className="fixed top-4 left-4 right-4 sm:top-4 sm:right-4 sm:left-auto z-50 animate-slide-in-right">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 max-w-sm mx-auto sm:mx-0">
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
                 <span className="text-sm">✅</span>
@@ -1019,11 +1082,11 @@ const TaskItApp = () => {
               </div>
               <button
                 onClick={() => {
-                  toggleTaskImportant(createdTaskInfo.id)
+                  toggleBig3(createdTaskInfo.id)
                   setShowTaskCreatedModal(false)
                   setCreatedTaskInfo(null)
                 }}
-                className="text-yellow-500 hover:text-yellow-600 transition-colors"
+                className="text-yellow-500 hover:text-yellow-600 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
                 title="Marcar como Big 3"
               >
                 ⭐

@@ -4,20 +4,52 @@ export const attachmentService = {
   // Subir archivo a Supabase Storage
   async uploadFile(file, userId, taskId) {
     try {
+      console.log('🔧 Upload params:', { 
+        fileName: file.name, 
+        fileSize: file.size, 
+        fileType: file.type,
+        userId, 
+        taskId 
+      })
+
       const fileExt = file.name.split('.').pop()
       const fileName = `${Date.now()}.${fileExt}`
       const filePath = `${userId}/${taskId}/${fileName}`
+
+      console.log('📁 Upload path:', filePath)
+
+      // Verificar si el bucket existe antes de subir
+      console.log('🪣 Verificando bucket...')
+      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets()
+      console.log('🪣 Buckets disponibles:', buckets?.map(b => b.name))
+      if (bucketError) console.error('🪣 Error listando buckets:', bucketError)
 
       const { data, error } = await supabase.storage
         .from('task-attachments')
         .upload(filePath, file)
 
-      if (error) throw error
+      console.log('📤 Upload result:', { data, error })
+
+      if (error) {
+        console.error('❌ Supabase upload error:')
+        console.error('   Message:', error.message)
+        console.error('   StatusCode:', error.statusCode)
+        console.error('   Error:', error.error)
+        console.error('   Hint:', error.hint)
+        console.error('   Full error object:', JSON.stringify(error, null, 2))
+        throw error
+      }
 
       return { filePath: data.path, fileName: file.name, error: null }
     } catch (error) {
-      console.error('Error uploading file:', error)
-      return { filePath: null, fileName: null, error: error.message }
+      console.error('❌ Error uploading file:', error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        statusCode: error.statusCode,
+        error: error.error,
+        hint: error.hint
+      })
+      return { filePath: null, fileName: null, error: error.message || 'Error desconocido en la subida' }
     }
   },
 
@@ -163,71 +195,28 @@ export const attachmentService = {
     }
   },
 
-  // Procesar y crear attachment según el tipo
+  // Procesar y crear attachment (solo archivos)
   async processAndCreateAttachment(attachmentData, userId, taskId) {
     try {
-      const baseData = {
-        task_id: taskId,
-        user_id: userId,
-        type: attachmentData.type,
-        title: attachmentData.title,
-        metadata: {}
-      }
+      // Solo procesamos archivos con la nueva estructura simplificada
+      if (attachmentData.file) {
+        const uploadResult = await this.uploadFile(attachmentData.file, userId, taskId)
+        if (uploadResult.error) {
+          return { data: null, error: uploadResult.error }
+        }
 
-      switch (attachmentData.type) {
-        case 'image':
-        case 'document':
-          // Para archivos, subir a Storage
-          if (attachmentData.file) {
-            const uploadResult = await this.uploadFile(attachmentData.file, userId, taskId)
-            if (uploadResult.error) {
-              return { data: null, error: uploadResult.error }
-            }
+        const attachmentRecord = {
+          task_id: taskId,
+          user_id: userId,
+          file_path: uploadResult.filePath,
+          file_name: uploadResult.fileName,
+          file_size: attachmentData.file.size,
+          file_type: attachmentData.file.type
+        }
 
-            const attachmentRecord = {
-              ...baseData,
-              file_path: uploadResult.filePath,
-              file_name: uploadResult.fileName,
-              file_size: attachmentData.file.size,
-              file_type: attachmentData.file.type
-            }
-
-            return await this.createAttachment(attachmentRecord)
-          }
-          break
-
-        case 'note':
-        case 'link':
-        case 'location':
-          const textAttachment = {
-            ...baseData,
-            content: attachmentData.content
-          }
-          return await this.createAttachment(textAttachment)
-
-        case 'contact':
-          const contactAttachment = {
-            ...baseData,
-            content: attachmentData.content,
-            metadata: {
-              phone: attachmentData.phone || null
-            }
-          }
-          return await this.createAttachment(contactAttachment)
-
-        case 'amount':
-          const amountAttachment = {
-            ...baseData,
-            content: attachmentData.content,
-            metadata: {
-              amount: attachmentData.amount,
-              currency: attachmentData.currency || 'EUR'
-            }
-          }
-          return await this.createAttachment(amountAttachment)
-
-        default:
-          return { data: null, error: 'Tipo de attachment no soportado' }
+        return await this.createAttachment(attachmentRecord)
+      } else {
+        return { data: null, error: 'No se proporcionó archivo para subir' }
       }
     } catch (error) {
       console.error('Error processing attachment:', error)

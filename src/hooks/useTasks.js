@@ -4,19 +4,38 @@ import { useAuth } from './useAuth'
 import { attachmentService } from '@/services/attachments'
 
 export const useTasks = () => {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  
+  console.log('📋 useTasks - Estado actual:', { 
+    user: !!user, 
+    userEmail: user?.email,
+    userId: user?.id,
+    authLoading, 
+    tasksLength: tasks.length, 
+    tasksLoading: loading 
+  })
+  
+  // Track when tasks are actually loaded
+  if (tasks.length > 0) {
+    console.log('📋 ✅ TAREAS CARGADAS:', tasks.length, 'tareas disponibles')
+  } else if (!loading && user && !authLoading) {
+    console.log('📋 ⚠️ Usuario autenticado pero SIN TAREAS - puede ser normal si no hay tareas creadas')
+  }
 
   // Load tasks
   const loadTasks = async () => {
+    console.log('📋 loadTasks called - user:', !!user, 'user.id:', user?.id)
+    
     if (!user?.id) {
-      console.warn('User not available in loadTasks')
+      console.warn('📋 User not available in loadTasks')
       return
     }
 
     try {
+      console.log('📋 Setting loading to true and fetching tasks...')
       setLoading(true)
       const { data, error } = await supabase
         .from('tasks')
@@ -24,6 +43,8 @@ export const useTasks = () => {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
+      console.log('📋 Supabase response:', { dataLength: data?.length, error })
+      
       if (error) throw error
 
       // Map database fields to component expected format and load attachments
@@ -34,6 +55,7 @@ export const useTasks = () => {
           
           return {
             id: task.id,
+            text: task.title, // TaskDetailScreen usa 'text'
             title: task.title,
             description: task.description,
             notes: task.description, // alias for compatibility
@@ -50,12 +72,14 @@ export const useTasks = () => {
         })
       )
 
+      console.log('📋 Mapped tasks:', mappedTasks.length, 'tasks loaded')
       setTasks(mappedTasks)
       setError(null)
     } catch (err) {
-      console.error('Error loading tasks:', err)
+      console.error('📋 Error loading tasks:', err)
       setError(err.message)
     } finally {
+      console.log('📋 Setting loading to false')
       setLoading(false)
     }
   }
@@ -155,9 +179,51 @@ export const useTasks = () => {
   // Toggle completion
   const toggleComplete = async (taskId) => {
     const task = tasks.find(t => t.id === taskId)
-    if (!task) return
+    if (!task) {
+      return { error: 'Tarea no encontrada' }
+    }
 
-    return await updateTask(taskId, { completed: !task.completed })
+    console.log('🎯 INICIO toggleComplete:', new Date().toLocaleTimeString())
+
+    // 1. Optimistic update - cambio inmediato
+    const newCompletedState = !task.completed
+    setTasks(prev => prev.map(t => 
+      t.id === taskId 
+        ? { ...t, completed: newCompletedState, justCompleted: newCompletedState } 
+        : t
+    ))
+
+    try {
+      // 2. Actualizar en base de datos
+      const result = await updateTask(taskId, { completed: newCompletedState })
+      
+      if (result.error) {
+        // Revertir si hay error
+        setTasks(prev => prev.map(t => 
+          t.id === taskId ? { ...task } : t
+        ))
+        return result
+      }
+
+      console.log('⏰ INICIANDO timeout de 2 segundos:', new Date().toLocaleTimeString())
+      
+      // 3. Mostrar tarea tachada por 2 segundos (estilo Daily Rituals)
+      setTimeout(() => {
+        console.log('✅ EJECUTANDO reorganización después de 2 segundos:', new Date().toLocaleTimeString())
+        // Simplemente quitar el flag - la tarea se reorganiza automáticamente
+        setTasks(prev => prev.map(t => 
+          t.id === taskId ? { ...t, justCompleted: false } : t
+        ))
+      }, 3000) // 3 segundos para testing - ver si se siente mejor
+
+      return result
+    } catch (error) {
+      // Revertir si hay error
+      setTasks(prev => prev.map(t => 
+        t.id === taskId ? { ...task } : t
+      ))
+      return { error: error.message }
+    }
   }
 
   // Toggle Big 3 (important)
@@ -231,8 +297,23 @@ export const useTasks = () => {
 
   // Setup real-time subscription
   useEffect(() => {
-    if (!user?.id) return
+    console.log('📋 useTasks useEffect triggered - user:', !!user, 'authLoading:', authLoading)
+    
+    // Don't do anything while auth is still loading
+    if (authLoading) {
+      console.log('📋 Auth still loading, waiting...')
+      return
+    }
+    
+    if (!user?.id) {
+      console.log('📋 No user available, setting loading to false')
+      setTasks([])
+      setLoading(false)
+      return
+    }
 
+    console.log('📋 Usuario disponible, cargando tareas para:', user.email || user.id)
+    // Cargar tareas inmediatamente cuando el usuario esté disponible
     loadTasks()
 
     // Subscribe to real-time changes
@@ -256,7 +337,7 @@ export const useTasks = () => {
     return () => {
       subscription.unsubscribe()
     }
-  }, [user])
+  }, [user, authLoading])
 
   // Add attachment to task
   const addAttachment = async (taskId, attachmentData) => {

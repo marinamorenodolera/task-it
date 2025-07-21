@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
 import BaseCard from '../ui/BaseCard'
-import { Circle, CheckCircle2 } from 'lucide-react'
+import { Circle, CircleCheck } from 'lucide-react'
 import { useGestures } from '@/hooks/useGestures'
 
 const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReorder }) => {
   const [isBeingReordered, setIsBeingReordered] = useState(false)
+  const [checkboxPressed, setCheckboxPressed] = useState(false)
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useGestures()
   const hasAdditionalContent = () => {
     return (task.attachments && task.attachments.length > 0) || 
@@ -49,7 +50,7 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
   }
 
   const handleCardClick = () => {
-    if (!isBeingReordered && onClick) {
+    if (!isBeingReordered && !checkboxPressed && onClick) {
       onClick()
     }
   }
@@ -58,7 +59,11 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
     <BaseCard
       variant="interactive"
       onClick={handleCardClick}
-      className={`p-3 transition-all ${
+      className={`p-3 transition-all duration-200 ease-out ${
+        task.justCompleted 
+          ? 'opacity-90' 
+          : 'opacity-100'
+      } ${
         task.completed 
           ? 'border-green-200 bg-green-50' 
           : 'hover:border-purple-200 bg-white'
@@ -69,19 +74,34 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
     >
       <div className="flex items-center gap-3">
         <button 
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            setCheckboxPressed(true)
+            onComplete(task.id)
+            setTimeout(() => setCheckboxPressed(false), 100)
+          }}
           onClick={(e) => {
             e.stopPropagation()
-            onComplete(task.id)
+            e.preventDefault()
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation()
+            setCheckboxPressed(true)
+            setTimeout(() => setCheckboxPressed(false), 100)
           }}
           className={`transition-colors ${
             task.completed ? 'text-green-500' : 'text-gray-400 hover:text-purple-500'
           }`}
         >
-          {task.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+          {task.completed ? 
+            <CircleCheck size={18} style={{ pointerEvents: 'none' }} /> : 
+            <Circle size={18} style={{ pointerEvents: 'none' }} />
+          }
         </button>
         
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span className={`text-sm font-medium ${
+          <span className={`text-sm font-medium transition-all duration-300 ${
             task.completed 
               ? 'text-green-700 line-through' 
               : 'text-gray-900'
@@ -115,25 +135,27 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
             </span>
           )}
 
-          {/* Badge de important */}
-          {task.important && (
-            <span className="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full flex-shrink-0">
-              ⭐ Big 3
-            </span>
-          )}
         </div>
         
         {/* Botón para marcar como Big 3 (solo en tareas no importantes) */}
         {!task.important && onToggleImportant && (
           <button
-            onClick={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation()
+              e.preventDefault()
               onToggleImportant(task.id)
             }}
-            className="text-gray-400 hover:text-yellow-500 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation()
+            }}
+            className="text-gray-400 hover:text-yellow-500 transition-colors"
             title="Marcar como Big 3"
           >
-            ⭐
+            <span style={{ pointerEvents: 'none' }}>⭐</span>
           </button>
         )}
         
@@ -141,12 +163,17 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
         {task.subtasks && task.subtasks.length > 0 && (
           <button
             onClick={(e) => {
+              e.preventDefault()
               e.stopPropagation()
               // Toggle expand logic - handled by parent component
             }}
-            className="text-gray-400 hover:text-gray-600 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+            onTouchEnd={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            ⌄
+            <span style={{ pointerEvents: 'none' }}>⌄</span>
           </button>
         )}
       </div>

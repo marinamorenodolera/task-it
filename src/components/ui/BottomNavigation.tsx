@@ -56,22 +56,15 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
   const currentTab = getCurrentTab()
 
   const handleDailyClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    
     // If there's a callback provided, use it (for internal state navigation)
     if (onDailyNavigate) {
+      e.preventDefault()
       onDailyNavigate()
       return
     }
     
-    // Check if we're in a task detail view and need to navigate back
-    const isInTaskDetail = pathname.includes('/task/') || pathname.includes('/daily') && window.location.hash
-    
-    if (isInTaskDetail || pathname !== '/daily') {
-      // Navigate intelligently to Daily main
-      router.push('/daily')
-    }
-    // If already on Daily main, do nothing
+    // Always navigate to Daily page - let Next.js handle route optimization
+    router.push('/daily')
   }
 
   return (

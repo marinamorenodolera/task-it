@@ -33,7 +33,7 @@ export default function ClientRootLayout({ children }: ClientRootLayoutProps) {
   return (
     <AuthProvider>
       <AuthGuard>
-        <div className="min-h-screen pb-20 md:pb-0">
+        <div className="min-h-screen pb-24">
           {children}
         </div>
         <BottomNavigation />

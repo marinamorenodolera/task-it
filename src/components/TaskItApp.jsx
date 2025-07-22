@@ -51,11 +51,13 @@ const TaskItApp = () => {
     tasks, 
     importantTasks, 
     routineTasks, 
+    waitingTasks,
     big3Count,
     addTask, 
     updateTask, 
     toggleComplete, 
     toggleBig3,
+    toggleWaitingStatus,
     deleteTask,
     addAttachment,
     deleteAttachment,
@@ -323,12 +325,6 @@ const TaskItApp = () => {
       const result = await toggleComplete(id)
       if (result?.error) {
         alert('Error al actualizar tarea: ' + result.error)
-      } else {
-        // ✅ Actualizar selectedTask si existe
-        const updatedTask = tasks.find(t => t.id === id)
-        if (updatedTask && selectedTask?.id === id) {
-          setSelectedTask(updatedTask)
-        }
       }
     } catch (error) {
       alert('Error inesperado: ' + error.message)
@@ -404,15 +400,31 @@ const TaskItApp = () => {
             handleBackToMain()
           }
         }}
-        onToggleComplete={toggleTaskComplete}
+        onToggleComplete={async (taskId) => {
+          // ✅ Actualizar selectedTask inmediatamente para feedback visual
+          if (selectedTask?.id === taskId) {
+            setSelectedTask(prev => ({...prev, completed: !prev.completed}))
+          }
+          await toggleTaskComplete(taskId)
+        }}
         onToggleImportant={async (taskId) => {
+          // ✅ Actualizar selectedTask inmediatamente para feedback visual
+          if (selectedTask?.id === taskId) {
+            setSelectedTask({...selectedTask, important: !selectedTask.important})
+          }
           await toggleBig3(taskId)
-          const updatedTask = tasks.find(t => t.id === taskId)
-          if (updatedTask) setSelectedTask(updatedTask)
         }}
         onUpdate={async (updatedTask) => {
           await updateTask(updatedTask.id, updatedTask)
           setSelectedTask(updatedTask)
+        }}
+        onToggleWaitingStatus={async (taskId) => {
+          // ✅ Actualizar selectedTask inmediatamente para feedback visual
+          if (selectedTask?.id === taskId) {
+            const newStatus = selectedTask.status === 'pending' ? 'inbox' : 'pending'
+            setSelectedTask({...selectedTask, status: newStatus})
+          }
+          await toggleWaitingStatus(taskId)
         }}
         onAddAttachment={addAttachment}
         onDeleteAttachment={deleteAttachment}
@@ -729,6 +741,33 @@ const TaskItApp = () => {
           ) : (
             <div className="text-center py-4 text-gray-400">
               <p className="text-sm">No hay tareas creadas</p>
+            </div>
+          )}
+        </div>
+
+        {/* En Espera - NUEVA SECCIÓN (tareas esperando respuesta externa) */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <span className="text-xl">⏳</span>
+            En Espera ({waitingTasks.length})
+          </h2>
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas iniciadas esperando respuesta o feedback externo.
+          </p>
+          {waitingTasks.length > 0 ? (
+            <div className="space-y-2">
+              {waitingTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onClick={() => handleTaskClick(task)}
+                  onComplete={toggleTaskComplete}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-gray-400">
+              <p className="text-sm">No hay tareas en espera</p>
             </div>
           )}
         </div>

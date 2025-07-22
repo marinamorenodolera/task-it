@@ -5,7 +5,7 @@ import AttachmentItem from '../attachments/AttachmentItem'
 import { useGestures } from '@/hooks/useGestures'
 import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, Star, StarOff, Calendar, Link, Euro, Clock, MapPin, FileText, User } from 'lucide-react'
 
-const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onAddAttachment, onDeleteAttachment, onReloadAttachments }) => {
+const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onAddAttachment, onDeleteAttachment, onReloadAttachments }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editedTask, setEditedTask] = useState(task)
   const [showAttachmentPanel, setShowAttachmentPanel] = useState(false)
@@ -643,6 +643,59 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
       {/* Content Modernizado */}
       <div className="p-4 max-w-2xl mx-auto">
+        {/* Título Limpio de la Tarea */}
+        <div className="mb-6">
+          {isEditing ? (
+            <input
+              type="text"
+              value={editedTask.text || editedTask.title || ''}
+              onChange={(e) => setEditedTask({...editedTask, text: e.target.value, title: e.target.value})}
+              className="w-full text-2xl font-semibold bg-transparent border-b-2 border-blue-200 focus:border-blue-500 outline-none pb-2 text-gray-900"
+              placeholder="Título de la tarea..."
+            />
+          ) : (
+            <h1 className="text-2xl font-semibold text-gray-900 mb-4">
+              {task.title || task.text || 'Sin título'}
+            </h1>
+          )}
+          
+          {!isEditing && task.description && task.description.trim() !== '' && (
+            <p className="text-gray-600 text-base leading-relaxed mb-2">
+              {task.description}
+            </p>
+          )}
+          
+          {!isEditing && task.notes && task.notes !== task.description && task.notes.trim() !== '' && (
+            <p className="text-gray-600 text-base leading-relaxed mb-2">
+              {task.notes}
+            </p>
+          )}
+          
+          {/* Información adicional compacta */}
+          {!isEditing && (
+            <div className="flex flex-wrap gap-3">
+              {task.deadline && (
+                <div className="flex items-center gap-1 text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
+                  <Calendar size={14} />
+                  <span>{formatTaskDeadline(task.deadline)}</span>
+                </div>
+              )}
+              {task.amount && (
+                <div className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-2 py-1 rounded-lg">
+                  <Euro size={14} />
+                  <span>{task.amount}€</span>
+                </div>
+              )}
+              {task.link && (
+                <div className="flex items-center gap-1 text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+                  <Link size={14} />
+                  <span className="truncate max-w-[120px]">Enlace</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Action Buttons Modernizados */}
         <div className="flex gap-3 mb-6">
           <button
@@ -665,7 +718,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               className="flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-all duration-200 font-medium border border-yellow-200"
             >
               <StarOff size={20} />
-              <span className="text-sm">No Big 3</span>
+              <span className="text-sm">Quitar de Big 3</span>
             </button>
           ) : (
             <button
@@ -676,25 +729,40 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               <span className="text-sm">Big 3</span>
             </button>
           )}
+
+          {/* Botón En Espera */}
+          <button
+            onClick={() => {
+              console.log('🔴 BOTÓN EN ESPERA CLICKEADO');
+              console.log('🔍 Task object:', task);
+              console.log('🔍 Task.status:', task.status);
+              console.log('🔍 onToggleWaitingStatus exists:', !!onToggleWaitingStatus);
+              
+              if (onToggleWaitingStatus) {
+                console.log('🔄 Ejecutando onToggleWaitingStatus...');
+                onToggleWaitingStatus(task.id);
+              } else {
+                console.log('❌ onToggleWaitingStatus es undefined');
+              }
+            }}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl transition-all duration-200 font-medium ${
+              task.status === 'pending'
+                ? 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-200'
+                : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200'
+            }`}
+          >
+            <span className="text-lg">
+              {task.status === 'pending' ? '✅' : '⏳'}
+            </span>
+            <span className="text-sm">
+              {task.status === 'pending' ? 'Activar' : 'En Espera'}
+            </span>
+          </button>
         </div>
 
         {/* Task Content Card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-6 space-y-6">
-            {/* Task Title */}
-            <div>
-              {isEditing ? (
-                <input
-                  type="text"
-                  value={editedTask.text}
-                  onChange={(e) => setEditedTask({...editedTask, text: e.target.value})}
-                  className="w-full text-2xl font-bold bg-transparent border-b-2 border-blue-200 focus:border-blue-500 outline-none pb-2 text-gray-900"
-                  placeholder="Título de la tarea..."
-                />
-              ) : (
-                <h1 className="text-2xl font-bold text-gray-900">{task.text}</h1>
-              )}
-            </div>
 
             {/* Task Description - Mejorado */}
             {(task.notes || isEditing) && (

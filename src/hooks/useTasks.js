@@ -61,6 +61,7 @@ export const useTasks = () => {
             notes: task.description, // alias for compatibility
             completed: task.completed,
             important: task.is_big_3_today, // Map Big 3 to important
+            status: task.status || 'inbox', // Map status with default
             addedAt: new Date(task.created_at),
             deadline: task.deadline ? new Date(task.deadline) : null,
             amount: task.amount,
@@ -146,6 +147,7 @@ export const useTasks = () => {
       if (updates.deadline !== undefined) dbUpdates.deadline = updates.deadline?.toISOString() || null
       if (updates.amount !== undefined) dbUpdates.amount = updates.amount
       if (updates.link !== undefined) dbUpdates.link = updates.link
+      if (updates.status !== undefined) dbUpdates.status = updates.status
 
       const { data, error } = await supabase
         .from('tasks')
@@ -172,7 +174,14 @@ export const useTasks = () => {
       return { data, error: null }
     } catch (err) {
       console.error('Error updating task:', err)
-      return { data: null, error: err.message }
+      console.error('Error details:', {
+        message: err.message,
+        code: err.code,
+        details: err.details,
+        hint: err.hint,
+        full: err
+      })
+      return { data: null, error: err.message || err.toString() || 'Error desconocido' }
     }
   }
 
@@ -239,6 +248,23 @@ export const useTasks = () => {
     }
 
     return await updateTask(taskId, { important: !task.important })
+  }
+
+  // Toggle waiting status (inbox <-> pending)
+  const toggleWaitingStatus = async (taskId) => {
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return { error: 'Tarea no encontrada' }
+
+    console.log('🔍 toggleWaitingStatus - Task antes:', task)
+    console.log('🔍 toggleWaitingStatus - Status actual:', task.status)
+    
+    const newStatus = task.status === 'pending' ? 'inbox' : 'pending'
+    console.log('🔍 toggleWaitingStatus - Nuevo status:', newStatus)
+    
+    const result = await updateTask(taskId, { status: newStatus })
+    console.log('🔍 toggleWaitingStatus - Resultado:', result)
+    
+    return result
   }
 
   // Delete task
@@ -407,8 +433,9 @@ export const useTasks = () => {
   }
 
   // Computed values
-  const importantTasks = tasks.filter(task => task.important && !task.completed)
-  const routineTasks = tasks.filter(task => !task.important && !task.completed)
+  const importantTasks = tasks.filter(task => task.important && !task.completed && task.status !== 'pending')
+  const routineTasks = tasks.filter(task => !task.important && !task.completed && task.status !== 'pending')
+  const waitingTasks = tasks.filter(task => task.status === 'pending' && !task.completed)
   const completedTasks = tasks.filter(task => task.completed)
   const big3Count = importantTasks.length
 
@@ -418,12 +445,14 @@ export const useTasks = () => {
     error,
     importantTasks,
     routineTasks,
+    waitingTasks,
     completedTasks,
     big3Count,
     addTask,
     updateTask,
     toggleComplete,
     toggleBig3,
+    toggleWaitingStatus,
     deleteTask,
     setBig3Tasks,
     loadTasks,

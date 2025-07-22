@@ -4,7 +4,7 @@ import { useAuth } from './useAuth'
 import { isToday } from '@/utils/dateHelpers'
 
 export const useRituals = () => {
-  const { user } = useAuth()
+  const { user, authState } = useAuth()
   const [rituals, setRituals] = useState([])
   const [completions, setCompletions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -379,7 +379,7 @@ export const useRituals = () => {
       subscription.unsubscribe()
       clearInterval(resetInterval)
     }
-  }, [user])
+  }, [authState, user?.id])
 
   // Computed values
   const completedRituals = rituals.filter(ritual => ritual.completed)

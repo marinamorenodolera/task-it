@@ -71,8 +71,29 @@ export const useActivities = () => {
       // Check for daily reset first
       checkDailyReset()
       
-      // Load today's activities from localStorage (reset at 6 AM)
-      const userActivities = JSON.parse(localStorage.getItem(`activities_${user.id}`) || '[]')
+      // Load today's activities from Supabase database
+      const { data: userActivities, error: activitiesError } = await supabase
+        .from('activity_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      
+      if (activitiesError) {
+        console.error('Error loading activities from Supabase:', activitiesError)
+        setActivities([])
+      } else {
+        // Map database fields to component format
+        const mappedActivities = (userActivities || []).map(activity => ({
+          id: activity.id,
+          type: activity.activity_type,
+          date: new Date(activity.created_at).toDateString(),
+          time: activity.activity_time,
+          notes: activity.notes || '',
+          duration: activity.duration_minutes || 0,
+          created_at: activity.created_at
+        }))
+        setActivities(mappedActivities)
+      }
       
       // Load predefined activities from localStorage or use defaults
       const userPredefined = JSON.parse(localStorage.getItem(`predefined_activities_${user.id}`) || 'null')
@@ -83,7 +104,6 @@ export const useActivities = () => {
         localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(defaultPredefinedActivities))
       }
       
-      setActivities(userActivities)
       setError(null)
     } catch (err) {
       console.error('Error loading activities:', err)
@@ -286,11 +306,20 @@ export const useActivities = () => {
     }
   }
 
-  // Delete activity (simplified version)
+  // Delete activity (with Supabase integration)
   const deleteActivity = async (activityId) => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
+      // Delete from Supabase first (same pattern as deleteTask)
+      const { error } = await supabase
+        .from('activity_history')
+        .delete()
+        .eq('id', activityId)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
       // Update local state
       setActivities(prev => prev.filter(activity => activity.id !== activityId))
       
@@ -312,11 +341,18 @@ export const useActivities = () => {
     const thisWeek = new Date()
     thisWeek.setDate(thisWeek.getDate() - 7)
 
-    const todayActivities = activities.filter(a => a.date === today)
+    const todayActivities = activities.filter(a => {
+      const activityDate = new Date(a.created_at);
+      const now = new Date();
+      
+      // Solo mostrar actividades de las últimas 18 horas
+      const hoursAgo = (now - activityDate) / (1000 * 60 * 60);
+      return hoursAgo <= 18;
+    });
     const weekActivities = activities.filter(a => new Date(a.created_at) >= thisWeek)
 
-    const totalTimeToday = todayActivities.reduce((total, activity) => total + activity.duration, 0)
-    const totalTimeWeek = weekActivities.reduce((total, activity) => total + activity.duration, 0)
+    const totalTimeToday = todayActivities.reduce((total, activity) => total + (parseInt(activity.duration) || 0), 0)
+    const totalTimeWeek = weekActivities.reduce((total, activity) => total + (parseInt(activity.duration) || 0), 0)
 
     const avgDailyTime = weekActivities.length > 0 
       ? Math.round(totalTimeWeek / 7) 
@@ -329,7 +365,7 @@ export const useActivities = () => {
         acc[type] = { count: 0, totalTime: 0 }
       }
       acc[type].count++
-      acc[type].totalTime += activity.duration
+      acc[type].totalTime += (parseInt(activity.duration) || 0)
       return acc
     }, {})
 
@@ -339,7 +375,8 @@ export const useActivities = () => {
       avgDailyTime,
       todayCount: todayActivities.length,
       weekCount: weekActivities.length,
-      typeStats
+      typeStats,
+      todayActivities // ✅ Incluimos las actividades filtradas en stats
     }
   }
 
@@ -411,6 +448,7 @@ export const useActivities = () => {
 
   return {
     activities,
+    todayActivities: stats.todayActivities, // ✅ Exponemos las actividades filtradas
     loading,
     error,
     stats,

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import TaskItApp from '@/components/TaskItApp'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 export default function DailyPage() {
   console.log('🏠 Daily page - INICIO DE CARGA')
@@ -24,7 +25,11 @@ export default function DailyPage() {
     }
   }, [])
 
-  console.log('🎨 Daily page - RENDERIZANDO sin AuthProvider (ahora está en root)')
+  console.log('🎨 Daily page - RENDERIZANDO con ErrorBoundary')
   
-  return <TaskItApp />
+  return (
+    <ErrorBoundary>
+      <TaskItApp />
+    </ErrorBoundary>
+  )
 }

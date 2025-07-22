@@ -4,7 +4,7 @@ import { useAuth } from './useAuth'
 import { attachmentService } from '@/services/attachments'
 
 export const useTasks = () => {
-  const { user, loading: authLoading } = useAuth()
+  const { user, authState } = useAuth()
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -13,7 +13,7 @@ export const useTasks = () => {
     user: !!user, 
     userEmail: user?.email,
     userId: user?.id,
-    authLoading, 
+    authState, 
     tasksLength: tasks.length, 
     tasksLoading: loading 
   })
@@ -21,7 +21,7 @@ export const useTasks = () => {
   // Track when tasks are actually loaded
   if (tasks.length > 0) {
     console.log('📋 ✅ TAREAS CARGADAS:', tasks.length, 'tareas disponibles')
-  } else if (!loading && user && !authLoading) {
+  } else if (!loading && user && authState === 'authenticated') {
     console.log('📋 ⚠️ Usuario autenticado pero SIN TAREAS - puede ser normal si no hay tareas creadas')
   }
 
@@ -297,47 +297,39 @@ export const useTasks = () => {
 
   // Setup real-time subscription
   useEffect(() => {
-    console.log('📋 useTasks useEffect triggered - user:', !!user, 'authLoading:', authLoading)
+    console.log('📋 useTasks useEffect triggered - authState:', authState, 'user:', !!user)
     
-    // Don't do anything while auth is still loading
-    if (authLoading) {
-      console.log('📋 Auth still loading, waiting...')
-      return
-    }
-    
-    if (!user?.id) {
-      console.log('📋 No user available, setting loading to false')
+    if (authState === 'authenticated' && user?.id) {
+      console.log('📋 Usuario autenticado, cargando tareas para:', user.email || user.id)
+      loadTasks()
+
+      // Subscribe to real-time changes
+      const subscription = supabase
+        .channel('tasks_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tasks',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            // Reload tasks on any change
+            loadTasks()
+          }
+        )
+        .subscribe()
+
+      return () => {
+        subscription.unsubscribe()
+      }
+    } else {
+      console.log('📋 No authenticated user, clearing tasks')
       setTasks([])
       setLoading(false)
-      return
     }
-
-    console.log('📋 Usuario disponible, cargando tareas para:', user.email || user.id)
-    // Cargar tareas inmediatamente cuando el usuario esté disponible
-    loadTasks()
-
-    // Subscribe to real-time changes
-    const subscription = supabase
-      .channel('tasks_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          // Reload tasks on any change
-          loadTasks()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [user, authLoading])
+  }, [authState, user?.id])
 
   // Add attachment to task
   const addAttachment = async (taskId, attachmentData) => {

@@ -67,6 +67,10 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
     router.push('/daily')
   }
 
+  const handleDisabledTabClick = (tabName: string) => {
+    alert(`${tabName} estará disponible próximamente 🚧`)
+  }
+
   return (
     <nav 
       className={`fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-lg ${className}`}
@@ -119,22 +123,20 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
               )
             }
             
-            // Regular Link for other tabs
+            // Disabled buttons for other tabs (coming soon)
             return (
-              <Link
+              <button
                 key={tab.id}
-                href={tab.href as any}
+                onClick={() => handleDisabledTabClick(tab.label)}
                 className={`
                   relative flex flex-col items-center justify-center
                   min-h-[60px] rounded-2xl transition-all duration-200
                   touch-manipulation group
-                  ${isActive 
-                    ? 'text-blue-600' 
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:scale-95'
-                  }
+                  text-gray-300 opacity-60
+                  focus:outline-none focus:ring-2 focus:ring-gray-300
                 `}
-                aria-label={`${tab.label} - ${tab.description}`}
-                aria-current={isActive ? 'page' : undefined}
+                aria-label={`${tab.label} - Próximamente disponible`}
+                disabled
               >
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
@@ -143,10 +145,10 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
                   viewBox="0 0 24 24" 
                   fill="none" 
                   stroke="currentColor" 
-                  strokeWidth={isActive ? "2.5" : "2"}
+                  strokeWidth="2"
                   strokeLinecap="round" 
                   strokeLinejoin="round" 
-                  className={`mb-1 transition-all duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`}
+                  className="mb-1 transition-all duration-200"
                   aria-hidden="true"
                 >
                   <path d={tab.iconPath} />
@@ -158,10 +160,10 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
                   )}
                 </svg>
                 
-                <span className={`text-xs font-medium transition-all duration-200 ${isActive ? 'font-semibold' : ''}`}>
+                <span className="text-xs font-medium">
                   {tab.label}
                 </span>
-              </Link>
+              </button>
             )
           })}
         </div>

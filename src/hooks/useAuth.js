@@ -4,7 +4,9 @@ import { supabase } from '@/lib/supabase'
 const AuthContext = createContext({
   user: null,
   profile: null,
-  loading: true,
+  authLoading: false,
+  authState: 'initializing',
+  isAuthenticated: false,
   signUp: () => {},
   signIn: () => {},
   signOut: () => {},
@@ -21,199 +23,111 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
+  const [mounted, setMounted] = useState(false)
+  const [authState, setAuthState] = useState('initializing') // initializing, authenticated, unauthenticated, error
 
-  console.log('🔐 AuthProvider - RENDER')
-  console.log('🔐 Estado actual:', { user: !!user, loading, profile: !!profile })
-  console.log('🔐 *** LOADING STATE:', loading, '***')
-  
-  // 🚨 DIAGNÓSTICO ESPECÍFICO PARA USUARIO AUTENTICADO
-  if (user && loading) {
-    console.log('🚨 PROBLEMA DETECTADO: Usuario existe pero loading=true')
-    console.log('🚨 Usuario:', user.email || user.id)
-    console.log('🚨 Este es el problema que causa el spinner infinito')
-    
-    // AGGRESSIVE FIX: Try to force loading to false immediately when we detect this issue
-    console.log('🚨 INTENTANDO FORCE RESET INMEDIATO')
-    setTimeout(() => {
-      console.log('🚨 EJECUTANDO setLoading(false) INMEDIATO')
-      setLoading(false)
-    }, 100) // Very short delay to break any potential sync issues
-  }
+  console.log('🔐 AuthProvider - Estado:', { authState, user: !!user, profile: !!profile, mounted })
 
+  // Wait for client hydration
   useEffect(() => {
-    console.log('🔐 AuthProvider - useEffect ejecutado')
-    console.log('🚀 INITIALIZATION LOGGING')
-    console.log('Environment check:')
-    console.log('- NODE_ENV:', process.env.NODE_ENV)
-    console.log('- Supabase URL configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL)
-    console.log('- Supabase Key configured:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-    
-    // Get initial session with better session persistence handling
-    const getInitialSession = async () => {
-      console.log('🔐 Verificando sesión inicial...')
-      console.log('🔐 Estado inicial loading antes de verificar:', loading)
-      
+    setMounted(true)
+  }, [])
+
+  // Initialize auth ONLY after hydration
+  useEffect(() => {
+    if (!mounted) return
+
+    console.log('🔐 Inicializando autenticación después de hydratación...')
+
+    const initializeAuth = async () => {
       try {
-        // First, wait a bit to let Supabase potentially hydrate from localStorage
-        // This helps with session persistence on page reload
-        console.log('🔐 Esperando hidratación de Supabase...')
-        await new Promise(resolve => setTimeout(resolve, 100))
+        setAuthState('initializing')
         
-        console.log('🔐 Llamando a supabase.auth.getSession()...')
+        // Get existing session AFTER hydration
         const { data: { session }, error } = await supabase.auth.getSession()
-        console.log('🔐 Resultado getSession:', { 
+        
+        console.log('🔐 Sesión obtenida:', { 
           session: !!session, 
-          user: !!session?.user, 
-          error: !!error,
-          sessionId: session?.access_token?.substring(0, 20) + '...',
-          userEmail: session?.user?.email
+          user: !!session?.user,
+          email: session?.user?.email,
+          error: !!error 
         })
         
-        if (error) {
-          console.error('🔐 Error en getSession:', error)
-          console.log('🔐 Estableciendo user a null debido a error')
-          setUser(null)
-        } else if (session?.user) {
-          console.log('🔐 ✅ Sesión PERSISTENTE encontrada, configurando usuario:', session.user.email)
-          setUser(session.user)
+        if (session && !error) {
+          console.log('🔐 ✅ Sesión válida encontrada, cargando perfil...')
           
-          // Cargar perfil sin bloquear el finally
-          try {
-            console.log('🔐 Cargando perfil de usuario...')
-            await loadUserProfile(session.user.id)
-            console.log('🔐 Perfil cargado exitosamente')
-          } catch (profileError) {
-            console.error('🔐 Error cargando perfil, pero continuando:', profileError)
-            // No bloquear la app si falla el perfil
+          // Load user profile
+          const { data: profileData } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+          
+          if (profileData) {
+            console.log('🔐 ✅ Perfil cargado exitosamente')
+            setUser(session.user)
+            setProfile(profileData)
+            setAuthState('authenticated')
+          } else {
+            console.log('🔐 ⚠️ No se encontró perfil, pero usuario autenticado')
+            setUser(session.user)
+            setProfile(null)
+            setAuthState('authenticated')
           }
-          
-          console.log('🔐 Usuario configurado, continuando al finally para resetear loading')
         } else {
-          console.log('🔐 ❌ No hay sesión persistente - usuario debe hacer login')
+          console.log('🔐 ❌ No hay sesión válida')
           setUser(null)
+          setProfile(null)
+          setAuthState('unauthenticated')
         }
-      } catch (error) {
-        console.error('🔐 Error capturado en getInitialSession:', error)
-        console.error('🔐 Stack trace:', error.stack)
+      } catch (err) {
+        console.error('🔐 ❌ Error en inicialización:', err)
         setUser(null)
-      } finally {
-        console.log('🔐 EJECUTANDO FINALLY - Finalizando verificación inicial')
-        console.log('🔐 Estado loading antes de resetear:', loading)
-        console.log('🔐 *** CRÍTICO: setLoading(false) ***')
-        setLoading(false)
-        console.log('🔐 setLoading(false) ejecutado exitosamente')
+        setProfile(null)
+        setAuthState('error')
       }
     }
-
-    getInitialSession()
-
-    // Safety fallback: If loading is still true after 10 seconds, force it to false
-    // This prevents infinite loading if something goes wrong with Supabase
-    const safetyTimer = setTimeout(() => {
-      console.log('🚨 SAFETY FALLBACK: Checking if loading needs to be forced to false after 10 seconds')
-      // Use setLoading with a callback to access current state
-      setLoading(currentLoading => {
-        if (currentLoading) {
-          console.log('🚨 Ejecutando setLoading(false) por timeout de seguridad')
-          return false
-        }
-        console.log('🚨 Loading ya está en false, no es necesario cambiar')
-        return currentLoading
-      })
-    }, 10000) // 10 seconds
-
-    // Faster safety check for authenticated users - simplified approach
-    const authenticatedUserTimer = setTimeout(() => {
-      console.log('🚨 SAFETY CHECK: Verificando estado después de 3 segundos')
-      console.log('🚨 Estado actual en timer: loading=', loading, 'user=', !!user)
-      
-      // Simple force to false after 3 seconds regardless of user state
-      // This should break any infinite loading loop
-      console.log('🚨 FORZANDO setLoading(false) después de 3 segundos')
-      setLoading(false)
-    }, 3000) // 3 seconds aggressive timeout
-
-    // Listen for auth changes with extensive logging
-    console.log('🔐 Configurando listener de auth state changes...')
+    
+    initializeAuth()
+    
+    // Setup auth listener ONLY after initialization
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔐 Auth state change detectado:', {
-          event,
-          session: !!session,
-          user: !!session?.user,
-          timestamp: new Date().toISOString()
-        })
-        console.log('🔐 Estado loading al inicio del auth change:', loading)
+        console.log('🔐 Auth state change:', { event, session: !!session })
         
-        try {
-          setUser(session?.user ?? null)
+        if (event === 'SIGNED_IN' && session) {
+          console.log('🔐 ✅ Usuario logueado, cargando perfil...')
           
-          if (session?.user) {
-            console.log('🔐 Nuevo usuario logueado:', session.user.email)
-            
-            // Cargar perfil sin bloquear el finally
-            try {
-              await loadUserProfile(session.user.id)
-              console.log('🔐 Perfil cargado en auth change')
-            } catch (profileError) {
-              console.error('🔐 Error cargando perfil en auth change:', profileError)
-            }
-          } else {
-            console.log('🔐 Usuario deslogueado, limpiando profile')
-            setProfile(null)
-          }
-        } catch (error) {
-          console.error('🔐 Error en onAuthStateChange:', error)
-        } finally {
-          console.log('🔐 *** CRÍTICO: Auth state change completado, setLoading(false) ***')
-          setLoading(false)
-          console.log('🔐 setLoading(false) ejecutado en onAuthStateChange')
+          // Load profile for signed in user
+          const { data: profileData } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+          
+          setUser(session.user)
+          setProfile(profileData)
+          setAuthState('authenticated')
+          
+        } else if (event === 'SIGNED_OUT') {
+          console.log('🔐 ❌ Usuario deslogueado')
+          setUser(null)
+          setProfile(null)
+          setAuthState('unauthenticated')
         }
       }
     )
-
-    return () => {
-      console.log('🔐 Limpiando subscription de auth changes')
-      console.log('🔐 Limpiando safety timers')
-      clearTimeout(safetyTimer)
-      clearTimeout(authenticatedUserTimer)
-      subscription.unsubscribe()
-    }
-  }, [])
-
-  const loadUserProfile = async (userId) => {
-    console.log('👤 loadUserProfile - INICIO para userId:', userId)
-    console.log('👤 Estado loading antes de cargar perfil:', loading)
     
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('👤 Error loading profile:', error)
-        console.log('👤 Error code:', error.code, 'continuando sin perfil...')
-        setProfile(null)
-        return null
-      }
-
-      console.log('👤 Perfil cargado exitosamente:', !!data)
-      setProfile(data)
-      return data
-    } catch (error) {
-      console.error('👤 Error capturado en loadUserProfile:', error)
-      setProfile(null)
-      return null
+    return () => {
+      console.log('🔐 Limpiando subscription')
+      subscription?.unsubscribe()
     }
-  }
+  }, [mounted])
 
   const signUp = async (email, password, username) => {
     try {
-      setLoading(true)
+      setAuthState('initializing')
       
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -224,22 +138,23 @@ export const AuthProvider = ({ children }) => {
       })
 
       if (error) {
-        console.error('SignUp error:', error)
+        console.error('🔐 SignUp error:', error)
+        setAuthState('unauthenticated')
         return { data: null, error }
       }
 
+      console.log('🔐 ✅ SignUp exitoso')
       return { data, error: null }
     } catch (error) {
-      console.error('SignUp catch error:', error)
+      console.error('🔐 SignUp catch error:', error)
+      setAuthState('error')
       return { data: null, error }
-    } finally {
-      setLoading(false)
     }
   }
 
   const signIn = async (email, password) => {
     try {
-      setLoading(true)
+      setAuthState('initializing')
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -247,37 +162,39 @@ export const AuthProvider = ({ children }) => {
       })
 
       if (error) {
-        console.error('SignIn error:', error)
+        console.error('🔐 SignIn error:', error)
+        setAuthState('unauthenticated')
         return { data: null, error }
       }
 
+      console.log('🔐 ✅ SignIn exitoso')
+      // El estado se actualizará automáticamente via onAuthStateChange
       return { data, error: null }
     } catch (error) {
-      console.error('SignIn catch error:', error)
+      console.error('🔐 SignIn catch error:', error)
+      setAuthState('error')
       return { data: null, error }
-    } finally {
-      setLoading(false)
     }
   }
 
   const signOut = async () => {
     try {
-      setLoading(true)
+      setAuthState('initializing')
+      
       const { error } = await supabase.auth.signOut()
       
       if (error) {
-        console.error('SignOut error:', error)
+        console.error('🔐 SignOut error:', error)
         return { error }
       }
       
-      setUser(null)
-      setProfile(null)
+      console.log('🔐 ✅ SignOut exitoso')
+      // El estado se actualizará automáticamente via onAuthStateChange
       return { error: null }
     } catch (error) {
-      console.error('SignOut catch error:', error)
+      console.error('🔐 SignOut catch error:', error)
+      setAuthState('error')
       return { error }
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -297,19 +214,27 @@ export const AuthProvider = ({ children }) => {
       setProfile(data)
       return { data, error: null }
     } catch (error) {
-      console.error('Profile update error:', error)
+      console.error('🔐 Profile update error:', error)
       return { data: null, error }
     }
   }
 
+  // Derived state
+  const authLoading = authState === 'initializing'
+  const isAuthenticated = authState === 'authenticated'
+
   const value = {
     user,
     profile,
-    loading,
+    authLoading,
+    authState,
+    isAuthenticated,
     signUp,
     signIn,
     signOut,
-    updateProfile
+    updateProfile,
+    // Legacy compatibility
+    loading: authLoading
   }
 
   return (

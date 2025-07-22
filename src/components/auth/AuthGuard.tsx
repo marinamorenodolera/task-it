@@ -8,12 +8,12 @@ interface AuthGuardProps {
 }
 
 export default function AuthGuard({ children }: AuthGuardProps) {
-  const { user, loading } = useAuth()
+  const { user, authLoading } = useAuth()
 
-  console.log('🛡️ AuthGuard - Estado:', { user: !!user, loading })
+  console.log('🛡️ AuthGuard - Estado:', { user: !!user, authLoading })
 
   // Show loading while authentication is being checked
-  if (loading) {
+  if (authLoading) {
     console.log('⏳ AuthGuard - Mostrando loading state')
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">

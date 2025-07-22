@@ -71,9 +71,11 @@ const TaskItApp = () => {
   } = useRituals()
   const { 
     activities, 
+    todayActivities,
     stats: activityStats, 
     predefinedActivities,
     addActivity,
+    deleteActivity,
     addPredefinedActivity,
     updatePredefinedActivity,
     deletePredefinedActivity,
@@ -81,13 +83,13 @@ const TaskItApp = () => {
     getActivityStats,
     checkDailyReset
   } = useActivities()
-
   // Local state
   const [quickCapture, setQuickCapture] = useState('')
   const [isListening, setIsListening] = useState(false)
   const [organizingMode, setOrganizingMode] = useState(false)
   const [voiceCommand, setVoiceCommand] = useState('')
   const [selectedTask, setSelectedTask] = useState(null)
+  const [selectedActivity, setSelectedActivity] = useState(null)
   const [showQuickOptions, setShowQuickOptions] = useState(false)
   const [lastAddedTask, setLastAddedTask] = useState(null)
   const [expandedRitual, setExpandedRitual] = useState(null)
@@ -321,6 +323,12 @@ const TaskItApp = () => {
       const result = await toggleComplete(id)
       if (result?.error) {
         alert('Error al actualizar tarea: ' + result.error)
+      } else {
+        // ✅ Actualizar selectedTask si existe
+        const updatedTask = tasks.find(t => t.id === id)
+        if (updatedTask && selectedTask?.id === id) {
+          setSelectedTask(updatedTask)
+        }
       }
     } catch (error) {
       alert('Error inesperado: ' + error.message)
@@ -846,10 +854,11 @@ const TaskItApp = () => {
 
           {/* Activities List */}
           <div className="space-y-2">
-            {activities.slice(0, 5).map((activity) => (
+            {todayActivities?.slice(0, 5).map((activity) => (
               <div
                 key={activity.id}
-                className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200"
+                className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors min-h-[44px]"
+                onClick={() => setSelectedActivity(activity)}
               >
                 <div className="w-3 h-3 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
                 <div className="flex-1">
@@ -863,8 +872,8 @@ const TaskItApp = () => {
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>📅 {activity.date}</span>
-                    {activity.time && <span>🕐 {activity.time}</span>}
+                    <span>📅 {new Date(activity.created_at).toLocaleDateString('es-ES')}</span>
+                    <span>🕐 {activity.time ? activity.time.slice(0, 5) : new Date(activity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   {activity.notes && (
                     <p className="text-sm text-gray-600">{activity.notes}</p>
@@ -1110,6 +1119,72 @@ const TaskItApp = () => {
                 title="Marcar como Big 3"
               >
                 ⭐
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Activity Detail Modal */}
+      {selectedActivity && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Detalle de Actividad</h3>
+              <button
+                onClick={() => setSelectedActivity(null)}
+                className="p-1 text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">🏃‍♂️ Actividad:</h4>
+                <p className="text-gray-700">{selectedActivity.type}</p>
+              </div>
+
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">⏱️ Duración:</h4>
+                <p className="text-gray-700">{selectedActivity.duration || 0} minutos</p>
+              </div>
+
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">📅 Fecha y hora:</h4>
+                <p className="text-gray-700">
+                  {new Date(selectedActivity.created_at).toLocaleDateString('es-ES')} - {' '}
+                  {selectedActivity.time ? selectedActivity.time.slice(0, 5) : new Date(selectedActivity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+
+              {selectedActivity.notes && (
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">📝 Notas:</h4>
+                  <p className="text-gray-700">{selectedActivity.notes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setSelectedActivity(null)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg transition-colors min-h-[44px] touch-manipulation"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await deleteActivity(selectedActivity.id);
+                    setSelectedActivity(null);
+                  } catch (error) {
+                    console.error('Error eliminando actividad:', error);
+                  }
+                }}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg transition-colors min-h-[44px] touch-manipulation"
+              >
+                🗑️ Eliminar
               </button>
             </div>
           </div>

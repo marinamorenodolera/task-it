@@ -733,16 +733,16 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
           {/* Botón En Espera */}
           <button
             onClick={() => {
-              console.log('🔴 BOTÓN EN ESPERA CLICKEADO');
-              console.log('🔍 Task object:', task);
-              console.log('🔍 Task.status:', task.status);
-              console.log('🔍 onToggleWaitingStatus exists:', !!onToggleWaitingStatus);
+              console.log('BOTON EN ESPERA CLICKEADO');
+              console.log('Task object:', task);
+              console.log('Task.status:', task.status);
+              console.log('onToggleWaitingStatus exists:', !!onToggleWaitingStatus);
               
               if (onToggleWaitingStatus) {
-                console.log('🔄 Ejecutando onToggleWaitingStatus...');
+                console.log('Ejecutando onToggleWaitingStatus...');
                 onToggleWaitingStatus(task.id);
               } else {
-                console.log('❌ onToggleWaitingStatus es undefined');
+                console.log('onToggleWaitingStatus es undefined');
               }
             }}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl transition-all duration-200 font-medium ${

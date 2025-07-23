@@ -5,6 +5,7 @@ import { AuthProvider } from '@/hooks/useAuth'
 import AuthGuard from '@/components/auth/AuthGuard'
 import BottomNavigation from '@/components/ui/BottomNavigation'
 import { NavigationProvider, useNavigation } from '@/hooks/useNavigation'
+import PWAUpdatePrompt from '@/components/PWAUpdatePrompt'
 
 interface ClientRootLayoutProps {
   children: React.ReactNode
@@ -44,6 +45,7 @@ export default function ClientRootLayout({ children }: ClientRootLayoutProps) {
             {children}
           </div>
           <BottomNavigationWrapper />
+          <PWAUpdatePrompt />
         </AuthGuard>
       </NavigationProvider>
     </AuthProvider>

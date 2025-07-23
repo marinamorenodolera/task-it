@@ -10,7 +10,7 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
   const hasAdditionalContent = () => {
     return (task.attachments && task.attachments.length > 0) || 
            (task.notes && task.notes.trim()) || 
-           (task.deadline && task.deadline.trim())
+           (task.deadline)
   }
 
   const formatTaskDeadline = (deadlineISO) => {

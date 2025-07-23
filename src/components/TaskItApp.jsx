@@ -39,14 +39,6 @@ import ActivitySettings from '@/components/activities/ActivitySettings'
 const TaskItApp = () => {
   const { user, loading, signOut } = useAuth()
   const { registerNavigationCallback, unregisterNavigationCallback } = useNavigation()
-  
-  console.log('📱 TaskItApp - RENDER')
-  console.log('👤 Usuario:', { 
-    exists: !!user, 
-    email: user?.email, 
-    id: user?.id?.substring(0, 8) + '...',
-    loading 
-  })
   const { 
     tasks, 
     importantTasks, 
@@ -372,7 +364,6 @@ const TaskItApp = () => {
   ]
 
   // Auth is now handled globally by AuthGuard - TaskItApp only renders when authenticated
-  console.log('✅ TaskItApp - Renderizando (auth manejado globalmente por AuthGuard)')
 
   // Conditional rendering for different views
   if (currentView === 'activity-settings') {
@@ -637,7 +628,34 @@ const TaskItApp = () => {
           )}
         </div>
 
-        {/* Daily Rituals - SEGUNDO */}
+        {/* En Espera - SEGUNDO (tareas esperando respuesta externa) */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <span className="text-xl">⏳</span>
+            En Espera ({waitingTasks.length})
+          </h2>
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas iniciadas esperando respuesta o feedback externo.
+          </p>
+          {waitingTasks.length > 0 ? (
+            <div className="space-y-2">
+              {waitingTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onClick={() => handleTaskClick(task)}
+                  onComplete={toggleTaskComplete}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-gray-400">
+              <p className="text-sm">No hay tareas en espera</p>
+            </div>
+          )}
+        </div>
+
+        {/* Daily Rituals - TERCERO */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -719,7 +737,7 @@ const TaskItApp = () => {
           </div>
         </div>
 
-        {/* Otras Tareas - TERCERO (tareas no importantes creadas rápidas) */}
+        {/* Otras Tareas - CUARTO (tareas no importantes creadas rápidas) */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-3">
             Otras Tareas ({routineTasks.length})
@@ -741,33 +759,6 @@ const TaskItApp = () => {
           ) : (
             <div className="text-center py-4 text-gray-400">
               <p className="text-sm">No hay tareas creadas</p>
-            </div>
-          )}
-        </div>
-
-        {/* En Espera - NUEVA SECCIÓN (tareas esperando respuesta externa) */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <span className="text-xl">⏳</span>
-            En Espera ({waitingTasks.length})
-          </h2>
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas iniciadas esperando respuesta o feedback externo.
-          </p>
-          {waitingTasks.length > 0 ? (
-            <div className="space-y-2">
-              {waitingTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onClick={() => handleTaskClick(task)}
-                  onComplete={toggleTaskComplete}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-4 text-gray-400">
-              <p className="text-sm">No hay tareas en espera</p>
             </div>
           )}
         </div>

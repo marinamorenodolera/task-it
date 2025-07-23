@@ -9,42 +9,70 @@ export const useTasks = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   
-  console.log('📋 useTasks - Estado actual:', { 
-    user: !!user, 
-    userEmail: user?.email,
-    userId: user?.id,
-    authState, 
-    tasksLength: tasks.length, 
-    tasksLoading: loading 
-  })
-  
-  // Track when tasks are actually loaded
-  if (tasks.length > 0) {
-    console.log('📋 ✅ TAREAS CARGADAS:', tasks.length, 'tareas disponibles')
-  } else if (!loading && user && authState === 'authenticated') {
-    console.log('📋 ⚠️ Usuario autenticado pero SIN TAREAS - puede ser normal si no hay tareas creadas')
+  // Debug logs only on state changes, not every render
+  if (process.env.NODE_ENV === 'development') {
+    // Only log significant state changes
+    if (authState === 'authenticated' && user && !loading && tasks.length === 0) {
+      console.debug('📋 Usuario autenticado sin tareas - puede ser normal')
+    }
+  }
+
+  // DIAGNÓSTICO: Verificar estructura de tabla tasks
+  const diagnoseTasks = async () => {
+    if (!user?.id) return
+
+    try {
+      console.log('🔍 DIAGNÓSTICO: Verificando estructura de tabla tasks...')
+      
+      // Intentar obtener una tarea para ver qué campos devuelve
+      const { data: sampleTasks, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', user.id)
+        .limit(1)
+
+      if (error) {
+        console.error('🔍 Error obteniendo muestra:', error)
+        return
+      }
+
+      if (sampleTasks && sampleTasks.length > 0) {
+        const sampleTask = sampleTasks[0]
+        console.log('🔍 CAMPOS DISPONIBLES EN TABLA TASKS:')
+        console.log('  - Campos encontrados:', Object.keys(sampleTask))
+        console.log('  - Tiene campo "status":', 'status' in sampleTask)
+        console.log('  - Valor actual status:', sampleTask.status)
+        console.log('  - Tipo de status:', typeof sampleTask.status)
+        console.log('  - Tarea completa de muestra:', sampleTask)
+      } else {
+        console.log('🔍 No hay tareas para diagnosticar estructura')
+      }
+    } catch (err) {
+      console.error('🔍 Error en diagnóstico:', err)
+    }
   }
 
   // Load tasks
   const loadTasks = async () => {
-    console.log('📋 loadTasks called - user:', !!user, 'user.id:', user?.id)
-    
     if (!user?.id) {
-      console.warn('📋 User not available in loadTasks')
+      console.debug('📋 User not available in loadTasks')
       return
     }
 
     try {
-      console.log('📋 Setting loading to true and fetching tasks...')
       setLoading(true)
+      
+      // EJECUTAR DIAGNÓSTICO EN PRIMERA CARGA (solo en desarrollo)
+      if (process.env.NODE_ENV === 'development') {
+        await diagnoseTasks()
+      }
+      
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
-      console.log('📋 Supabase response:', { dataLength: data?.length, error })
-      
       if (error) throw error
 
       // Map database fields to component expected format and load attachments
@@ -73,14 +101,17 @@ export const useTasks = () => {
         })
       )
 
-      console.log('📋 Mapped tasks:', mappedTasks.length, 'tasks loaded')
       setTasks(mappedTasks)
       setError(null)
+      
+      // Log successful load only once
+      if (process.env.NODE_ENV === 'development' && mappedTasks.length > 0) {
+        console.debug('📋 Tasks loaded:', mappedTasks.length)
+      }
     } catch (err) {
       console.error('📋 Error loading tasks:', err)
       setError(err.message)
     } finally {
-      console.log('📋 Setting loading to false')
       setLoading(false)
     }
   }
@@ -157,7 +188,18 @@ export const useTasks = () => {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        // Log detailed error information
+        console.error('❌ updateTask error:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          updates: updates,
+          dbUpdates: dbUpdates
+        })
+        throw error
+      }
 
       // Update local state
       setTasks(prev => prev.map(task => 
@@ -173,15 +215,8 @@ export const useTasks = () => {
 
       return { data, error: null }
     } catch (err) {
-      console.error('Error updating task:', err)
-      console.error('Error details:', {
-        message: err.message,
-        code: err.code,
-        details: err.details,
-        hint: err.hint,
-        full: err
-      })
-      return { data: null, error: err.message || err.toString() || 'Error desconocido' }
+      console.error('❌ updateTask failed:', err.message || err)
+      return { data: null, error: err.message || err.toString() || 'Error desconocido en updateTask' }
     }
   }
 
@@ -191,8 +226,6 @@ export const useTasks = () => {
     if (!task) {
       return { error: 'Tarea no encontrada' }
     }
-
-    console.log('🎯 INICIO toggleComplete:', new Date().toLocaleTimeString())
 
     // 1. Optimistic update - cambio inmediato
     const newCompletedState = !task.completed
@@ -213,17 +246,13 @@ export const useTasks = () => {
         ))
         return result
       }
-
-      console.log('⏰ INICIANDO timeout de 2 segundos:', new Date().toLocaleTimeString())
       
-      // 3. Mostrar tarea tachada por 2 segundos (estilo Daily Rituals)
+      // 3. Mostrar tarea tachada por 3 segundos
       setTimeout(() => {
-        console.log('✅ EJECUTANDO reorganización después de 2 segundos:', new Date().toLocaleTimeString())
-        // Simplemente quitar el flag - la tarea se reorganiza automáticamente
         setTasks(prev => prev.map(t => 
           t.id === taskId ? { ...t, justCompleted: false } : t
         ))
-      }, 3000) // 3 segundos para testing - ver si se siente mejor
+      }, 3000)
 
       return result
     } catch (error) {
@@ -255,16 +284,38 @@ export const useTasks = () => {
     const task = tasks.find(t => t.id === taskId)
     if (!task) return { error: 'Tarea no encontrada' }
 
-    console.log('🔍 toggleWaitingStatus - Task antes:', task)
-    console.log('🔍 toggleWaitingStatus - Status actual:', task.status)
+    console.log('🔄 toggleWaitingStatus - Task completa:', task)
+    console.log('🔄 toggleWaitingStatus - Status actual:', task.status)
+    console.log('🔄 toggleWaitingStatus - Task ID:', taskId)
     
     const newStatus = task.status === 'pending' ? 'inbox' : 'pending'
-    console.log('🔍 toggleWaitingStatus - Nuevo status:', newStatus)
+    console.log('🔄 toggleWaitingStatus - Nuevo status:', newStatus)
     
-    const result = await updateTask(taskId, { status: newStatus })
-    console.log('🔍 toggleWaitingStatus - Resultado:', result)
+    // Optimistic update - similar a toggleBig3
+    setTasks(prev => prev.map(t => 
+      t.id === taskId ? { ...t, status: newStatus } : t
+    ))
     
-    return result
+    try {
+      const result = await updateTask(taskId, { status: newStatus })
+      console.log('🔄 toggleWaitingStatus - Resultado Supabase:', result)
+      
+      if (result.error) {
+        // Revertir si hay error
+        setTasks(prev => prev.map(t => 
+          t.id === taskId ? { ...t, status: task.status } : t
+        ))
+      }
+      
+      return result
+    } catch (error) {
+      console.error('🔄 Error en toggleWaitingStatus:', error)
+      // Revertir cambio
+      setTasks(prev => prev.map(t => 
+        t.id === taskId ? { ...t, status: task.status } : t
+      ))
+      return { error: error.message }
+    }
   }
 
   // Delete task
@@ -323,10 +374,7 @@ export const useTasks = () => {
 
   // Setup real-time subscription
   useEffect(() => {
-    console.log('📋 useTasks useEffect triggered - authState:', authState, 'user:', !!user)
-    
     if (authState === 'authenticated' && user?.id) {
-      console.log('📋 Usuario autenticado, cargando tareas para:', user.email || user.id)
       loadTasks()
 
       // Subscribe to real-time changes
@@ -351,7 +399,6 @@ export const useTasks = () => {
         subscription.unsubscribe()
       }
     } else {
-      console.log('📋 No authenticated user, clearing tasks')
       setTasks([])
       setLoading(false)
     }

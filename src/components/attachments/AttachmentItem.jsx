@@ -1,9 +1,23 @@
 import React, { useState } from 'react'
+import { Trash2 } from 'lucide-react'
 
-const AttachmentItem = ({ attachment }) => {
+const AttachmentItem = ({ attachment, onDelete }) => {
   const [showImageViewer, setShowImageViewer] = useState(false)
   const [showDocumentViewer, setShowDocumentViewer] = useState(false)
   const [showPdfViewer, setShowPdfViewer] = useState(false)
+  
+  const formatDateWithDay = (dateString) => {
+    try {
+      const date = new Date(dateString)
+      const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+      const dayName = days[date.getDay()]
+      const formattedDate = date.toLocaleDateString('es-ES')
+      return `${dayName}, ${formattedDate}`
+    } catch (error) {
+      return dateString // Fallback si hay error
+    }
+  }
+  
   const getAttachmentIcon = (type) => {
     const icons = {
       link: '🔗',
@@ -30,8 +44,8 @@ const AttachmentItem = ({ attachment }) => {
     return colors[type] || 'gray'
   }
 
-  // Determinar tipo basado en file_type
-  const attachmentType = attachment.file_type?.startsWith('image/') ? 'image' : 'document'
+  // Determinar tipo basado en displayType o type o file_type
+  const attachmentType = attachment.displayType || attachment.type || (attachment.file_type?.startsWith('image/') ? 'image' : 'document')
   const color = getAttachmentColor(attachmentType)
   const icon = getAttachmentIcon(attachmentType)
 
@@ -56,25 +70,55 @@ const AttachmentItem = ({ attachment }) => {
         )}
         
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium text-${color}-800 truncate`}>
-            {attachment.file_name}
-          </p>
-          {attachment.file_size && (
-            <p className="text-xs text-gray-500">
-              {attachment.file_type} • {(attachment.file_size / 1024 / 1024).toFixed(1)} MB
-            </p>
+          {/* Para attachments de texto: mostrar tipo + contenido */}
+          {attachment.type && !attachment.file_size ? (
+            <>
+              <p className="text-xs text-gray-500 uppercase tracking-wider">
+                {attachment.type === 'note' ? 'NOTA' : 
+                 attachment.type === 'link' ? 'ENLACE' :
+                 attachment.type === 'contact' ? 'CONTACTO' :
+                 attachment.type === 'amount' ? 'IMPORTE' :
+                 attachment.type === 'location' ? 'UBICACIÓN' : attachment.type}:
+              </p>
+              <div className={`text-sm font-medium text-${color}-800 line-clamp-2`}>
+                {attachment.type === 'deadline' && attachment.content ? 
+                  formatDateWithDay(attachment.content) : 
+                 attachment.type === 'link' ? (
+                   <a 
+                     href={attachment.content} 
+                     target="_blank" 
+                     rel="noopener noreferrer"
+                     className="text-blue-600 hover:text-blue-800 underline"
+                     onClick={(e) => e.stopPropagation()}
+                   >
+                     {attachment.content}
+                   </a>
+                 ) : attachment.type === 'location' ? (
+                   <div className="whitespace-pre-line">
+                     {attachment.content.replace('📍 ', '')}
+                   </div>
+                 ) : attachment.type === 'amount' ? (
+                   attachment.title || attachment.content
+                 ) : (attachment.content || attachment.title)
+                }
+              </div>
+            </>
+          ) : (
+            /* Para archivos: formato original */
+            <>
+              <p className={`text-sm font-medium text-${color}-800 truncate`}>
+                {attachment.file_name}
+              </p>
+              {attachment.file_size && (
+                <p className="text-xs text-gray-500">
+                  {attachment.file_type} • {(attachment.file_size / 1024 / 1024).toFixed(1)} MB
+                </p>
+              )}
+            </>
           )}
         </div>
         
         {/* Botones de acción */}
-        {attachmentType === 'image' && (
-          <button
-            onClick={() => setShowImageViewer(true)}
-            className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
-          >
-            👁️
-          </button>
-        )}
         
         {attachmentType === 'document' && (
           <button
@@ -89,6 +133,8 @@ const AttachmentItem = ({ attachment }) => {
         {attachment.fileUrl && (
           <a
             href={attachment.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             download={attachment.file_name}
             className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
           >
@@ -96,17 +142,39 @@ const AttachmentItem = ({ attachment }) => {
           </a>
         )}
         
-        {attachment.type === 'link' && (
+        {/* Botón para links */}
+        {(attachmentType === 'link' || attachment.isClickable) && attachment.displayContent && (
           <a 
-            href={attachment.content} 
+            href={attachment.displayContent || attachment.content} 
             target="_blank" 
             rel="noopener noreferrer"
-            className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center`}
+            className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
             onClick={(e) => e.stopPropagation()}
           >
-            🔗
+            ↗️
           </a>
         )}
+        
+        {/* Botón eliminar con debug */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            console.log('🗑️ Clic en eliminar, attachment:', attachment)  // DEBUG
+            console.log('🗑️ onDelete function:', onDelete)                // DEBUG
+            
+            const confirmDelete = window.confirm('¿Eliminar este adjunto?')
+            console.log('🗑️ Usuario confirmó:', confirmDelete)            // DEBUG
+            
+            if (confirmDelete && onDelete) {
+              console.log('🗑️ Llamando onDelete...')                     // DEBUG
+              onDelete()
+            }
+          }}
+          className="text-red-500 hover:text-red-700 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors"
+          title="Eliminar adjunto"
+        >
+          <Trash2 size={16} />
+        </button>
       </div>
 
       {/* Visor de imagen en modal */}

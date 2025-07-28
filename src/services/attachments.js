@@ -24,11 +24,15 @@ export const attachmentService = {
       console.log('🪣 Buckets disponibles:', buckets?.map(b => b.name))
       if (bucketError) console.error('🪣 Error listando buckets:', bucketError)
 
+      console.log('✅ Bucket verificado, iniciando upload...')
+      console.log('📤 Subiendo archivo:', filePath)
+      console.log('📤 Tamaño del archivo:', file.size, 'bytes')
+      
       const { data, error } = await supabase.storage
         .from('task-attachments')
         .upload(filePath, file)
 
-      console.log('📤 Upload result:', { data, error })
+      console.log('🏁 Upload completado:', { data, error })
 
       if (error) {
         console.error('❌ Supabase upload error:')
@@ -195,10 +199,10 @@ export const attachmentService = {
     }
   },
 
-  // Procesar y crear attachment (solo archivos)
+  // Procesar y crear attachment (archivos y datos)
   async processAndCreateAttachment(attachmentData, userId, taskId) {
     try {
-      // Solo procesamos archivos con la nueva estructura simplificada
+      // Procesamos archivos con la estructura existente
       if (attachmentData.file) {
         const uploadResult = await this.uploadFile(attachmentData.file, userId, taskId)
         if (uploadResult.error) {
@@ -215,8 +219,29 @@ export const attachmentService = {
         }
 
         return await this.createAttachment(attachmentRecord)
+      } else if (attachmentData.type && attachmentData.content) {
+        // Manejar attachments que no son archivos (URL, nota, contacto, etc.)
+        const { data, error } = await supabase
+          .from('task_attachments')
+          .insert({
+            task_id: taskId,
+            user_id: userId,
+            type: attachmentData.type,
+            title: attachmentData.title || `${attachmentData.type} attachment`,
+            content: attachmentData.content,
+            metadata: attachmentData.metadata || {}
+          })
+          .select()
+          .single()
+
+        if (error) {
+          console.error('Error creating text attachment:', error)
+          return { data: null, error: error.message }
+        }
+
+        return { data, error: null }
       } else {
-        return { data: null, error: 'No se proporcionó archivo para subir' }
+        return { data: null, error: 'No se proporcionó archivo ni datos válidos para subir' }
       }
     } catch (error) {
       console.error('Error processing attachment:', error)

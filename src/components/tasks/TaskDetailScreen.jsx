@@ -136,15 +136,24 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
   const handleAddAttachment = async (attachmentData) => {
     try {
+      console.log('🔍 DEBUG: Datos enviados:', attachmentData)
       const result = await onAddAttachment(task.id, attachmentData)
+      
       if (result && !result.error) {
+        console.log('✅ SUCCESS: Attachment añadido')
         setTaskAttachments(prev => [...prev, result.data])
+        
+        // ✅ FORZAR RECARGA INMEDIATA
+        if (onReloadAttachments) {
+          await onReloadAttachments(task.id)
+        }
+        
         setShowAttachmentPanel(false)
         setSelectedAttachmentType(null)
         setAttachmentData({})
       }
     } catch (error) {
-      console.error('Error adding attachment:', error)
+      console.error('❌ EXCEPTION en handleAddAttachment:', error)
     }
   }
 
@@ -158,21 +167,23 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               <span>Añadir Fecha Límite</span>
             </div>
             <input
-              type="datetime-local"
+              type="date"
               value={attachmentData.deadline || ''}
               onChange={(e) => setAttachmentData({...attachmentData, deadline: e.target.value})}
               className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
             <div className="flex gap-2">
               <BaseButton
-                onClick={() => handleAddAttachment({
-                  type: 'deadline',
-                  title: 'Fecha límite',
-                  content: new Date(attachmentData.deadline).toLocaleString('es-ES'),
-                  metadata: {
-                    deadline: attachmentData.deadline
+                onClick={async () => {
+                  const updatedTask = {
+                    ...editedTask,
+                    due_date: attachmentData.deadline
                   }
-                })}
+                  setEditedTask(updatedTask)
+                  await onUpdate(updatedTask)
+                  setSelectedAttachmentType(null)
+                  setAttachmentData({})
+                }}
                 disabled={!attachmentData.deadline}
                 className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
               >
@@ -204,35 +215,26 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               onChange={(e) => {
                 const file = e.target.files[0]
                 if (file) {
-                  const reader = new FileReader()
-                  reader.onload = (event) => {
-                    setAttachmentData({
-                      ...attachmentData, 
-                      image: event.target.result,
-                      fileName: file.name,
-                      fileSize: file.size,
-                      file: file
-                    })
-                  }
-                  reader.readAsDataURL(file)
+                  setAttachmentData({
+                    ...attachmentData,
+                    file: file,
+                    fileName: file.name,
+                    fileSize: file.size
+                  })
                 }
               }}
               className="w-full px-3 py-2 border border-pink-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
             />
-            {attachmentData.image && (
-              <div className="space-y-2">
-                <img 
-                  src={attachmentData.image} 
-                  alt="Preview" 
-                  className="max-w-full h-32 object-cover rounded-lg border border-pink-200"
-                />
-                <p className="text-xs text-gray-600">{attachmentData.fileName}</p>
+            {attachmentData.file && (
+              <div className="p-3 bg-pink-100 rounded-lg border border-pink-200">
+                <p className="text-sm font-medium text-pink-800">{attachmentData.fileName}</p>
+                <p className="text-xs text-pink-600">{(attachmentData.fileSize / 1024).toFixed(1)} KB</p>
               </div>
             )}
             <div className="flex gap-2">
               <BaseButton
                 onClick={() => handleAddAttachment({ file: attachmentData.file })}
-                disabled={!attachmentData.image}
+                disabled={!attachmentData.file}
                 className="flex-1 bg-pink-600 hover:bg-pink-700 text-white"
               >
                 Añadir Imagen
@@ -878,7 +880,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                   {/* Solo mostrar botón cerrar si NO está editando */}
                   {!isEditing && (
                     <button 
-                      onClick={() => setShowAttachmentPanel(false)}
+                      onClick={() => setSelectedAttachmentType(null)}
                       className="p-1 text-blue-400 hover:text-blue-600 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
                     >
                       ✕
@@ -962,13 +964,42 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             {/* Lista de attachments existentes */}
             {taskAttachments.length > 0 && (
               <div className="space-y-2">
-                {taskAttachments.map((attachment) => (
-                  <AttachmentItem
-                    key={attachment.id}
-                    attachment={attachment}
-                    onDelete={() => onDeleteAttachment(task.id, attachment.id)}
-                  />
-                ))}
+                {taskAttachments.map((attachment) => {
+                  // Procesar attachment para correcta visualización
+                  const processedAttachment = {
+                    ...attachment,
+                    // Asegurar que tenga display title
+                    displayTitle: attachment.title || attachment.file_name || 'Sin título',
+                    // Determinar tipo correcto
+                    displayType: attachment.type || (attachment.file_type?.startsWith('image/') ? 'image' : 'document'),
+                    // Asegurar contenido para mostrar
+                    displayContent: attachment.content || null,
+                    // Para links, hacer clickeable
+                    isClickable: attachment.type === 'link' && attachment.content
+                  }
+                  
+                  return (
+                    <AttachmentItem
+                      key={attachment.id}
+                      attachment={processedAttachment}
+                      onDelete={async () => {
+                        console.log('🗑️ DEBUG: Eliminando attachment desde TaskDetailScreen')
+                        console.log('🗑️ DEBUG: Task ID:', task.id, 'Attachment ID:', attachment.id)
+                        
+                        const result = await onDeleteAttachment(task.id, attachment.id)
+                        console.log('🗑️ DEBUG: Resultado eliminación:', result)
+                        
+                        if (!result?.error) {
+                          // ✅ ACTUALIZAR UI INMEDIATAMENTE
+                          setTaskAttachments(prev => prev.filter(att => att.id !== attachment.id))
+                          console.log('✅ UI actualizada - attachment eliminado de la lista')
+                        } else {
+                          console.error('❌ Error eliminando attachment:', result.error)
+                        }
+                      }}
+                    />
+                  )
+                })}
               </div>
             )}
 

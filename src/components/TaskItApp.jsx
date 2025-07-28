@@ -18,7 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   Settings,
-  Target
+  Target,
+  Trash2
 } from 'lucide-react'
 
 import { useAuth } from '@/hooks/useAuth'
@@ -108,6 +109,7 @@ const TaskItApp = () => {
   const [showAllCompleted, setShowAllCompleted] = useState(false)
   const [showTaskCreatedModal, setShowTaskCreatedModal] = useState(false)
   const [createdTaskInfo, setCreatedTaskInfo] = useState(null)
+  const [scrollPosition, setScrollPosition] = useState(null)
 
   // Voice recognition setup
   const recognition = useRef(null)
@@ -168,22 +170,32 @@ const TaskItApp = () => {
   }
 
   const handleTaskClick = (task) => {
+    const currentScrollY = window.scrollY  // NUEVA LÍNEA
+    setScrollPosition(currentScrollY)      // NUEVA LÍNEA
+    
     setSelectedTask(task)
     setCurrentView('task-detail')
+    // No tocar el resto del código existente
   }
 
   const handleBackToMain = () => {
     setCurrentView('main')
     setSelectedTask(null)
-    setShouldAutoFocus(false) // No mostrar teclado al volver de TaskDetail
+    setShouldAutoFocus(false)
     
-    // Asegurar que el input no tenga focus
+    // AGREGAR ESTE BLOQUE:
     setTimeout(() => {
+      if (scrollPosition !== null) {
+        window.scrollTo(0, scrollPosition)
+        setScrollPosition(null)
+      }
+      
       const activeElement = document.activeElement
       if (activeElement && activeElement.tagName === 'INPUT') {
         activeElement.blur()
       }
     }, 100)
+    // Fin del bloque agregado
   }
 
   // Register navigation callback for intelligent Daily navigation
@@ -885,30 +897,46 @@ const TaskItApp = () => {
           {/* Activities List */}
           <div className="space-y-2">
             {todayActivities?.slice(0, 5).map((activity) => (
-              <div
-                key={activity.id}
-                className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors min-h-[44px]"
-                onClick={() => setSelectedActivity(activity)}
-              >
-                <div className="w-3 h-3 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-gray-900">{activity.type}</span>
-                    {activity.duration > 0 && (
-                      <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded flex items-center gap-1">
-                        <Clock size={10} />
-                        {activity.duration}min
-                      </span>
+              <div key={activity.id} className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                {/* Contenido principal - clickeable */}
+                <div 
+                  onClick={() => setSelectedActivity(activity)}
+                  className="flex-1 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg p-1 -m-1"
+                >
+                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <span>{activity.type}</span>
+                      {activity.duration > 0 && (
+                        <span className="text-gray-500">⏱️ {activity.duration}min</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      📅 {new Date(activity.created_at).toLocaleDateString('es-ES')} • 
+                      ⏰ {activity.time ? activity.time.slice(0, 5) : new Date(activity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    {activity.notes && (
+                      <div className="text-xs text-gray-500 mt-1 truncate">
+                        📝 {activity.notes}
+                      </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>📅 {new Date(activity.created_at).toLocaleDateString('es-ES')}</span>
-                    <span>🕐 {activity.time ? activity.time.slice(0, 5) : new Date(activity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  {activity.notes && (
-                    <p className="text-sm text-gray-600">{activity.notes}</p>
-                  )}
                 </div>
+                
+                {/* Botón eliminar - NO clickeable para modal */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const confirmDelete = window.confirm('¿Eliminar esta actividad?')
+                    if (confirmDelete) {
+                      deleteActivity(activity.id)
+                    }
+                  }}
+                  className="text-red-500 hover:text-red-700 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors"
+                  title="Eliminar actividad"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             ))}
           </div>

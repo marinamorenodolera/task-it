@@ -17,40 +17,6 @@ export const useTasks = () => {
     }
   }
 
-  // DIAGNÓSTICO: Verificar estructura de tabla tasks
-  const diagnoseTasks = async () => {
-    if (!user?.id) return
-
-    try {
-      console.log('🔍 DIAGNÓSTICO: Verificando estructura de tabla tasks...')
-      
-      // Intentar obtener una tarea para ver qué campos devuelve
-      const { data: sampleTasks, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', user.id)
-        .limit(1)
-
-      if (error) {
-        console.error('🔍 Error obteniendo muestra:', error)
-        return
-      }
-
-      if (sampleTasks && sampleTasks.length > 0) {
-        const sampleTask = sampleTasks[0]
-        console.log('🔍 CAMPOS DISPONIBLES EN TABLA TASKS:')
-        console.log('  - Campos encontrados:', Object.keys(sampleTask))
-        console.log('  - Tiene campo "status":', 'status' in sampleTask)
-        console.log('  - Valor actual status:', sampleTask.status)
-        console.log('  - Tipo de status:', typeof sampleTask.status)
-        console.log('  - Tarea completa de muestra:', sampleTask)
-      } else {
-        console.log('🔍 No hay tareas para diagnosticar estructura')
-      }
-    } catch (err) {
-      console.error('🔍 Error en diagnóstico:', err)
-    }
-  }
 
   // Load tasks
   const loadTasks = async () => {
@@ -61,11 +27,6 @@ export const useTasks = () => {
 
     try {
       setLoading(true)
-      
-      // EJECUTAR DIAGNÓSTICO EN PRIMERA CARGA (solo en desarrollo)
-      if (process.env.NODE_ENV === 'development') {
-        await diagnoseTasks()
-      }
       
       const { data, error } = await supabase
         .from('tasks')
@@ -90,6 +51,13 @@ export const useTasks = () => {
             completed: task.completed,
             important: task.is_big_3_today, // Map Big 3 to important
             status: task.status || 'inbox', // Map status with default
+            
+            // 🆕 CAMPOS DE SUBTAREAS VERIFICADOS EN SUPABASE:
+            parent_task_id: task.parent_task_id,
+            subtask_order: task.subtask_order || 0,
+            section_order: task.section_order || 0,
+            is_expanded: task.is_expanded || false,
+            
             addedAt: new Date(task.created_at),
             deadline: task.deadline ? new Date(task.deadline) : null,
             amount: task.amount,
@@ -118,25 +86,44 @@ export const useTasks = () => {
 
   // Add task
   const addTask = async (taskData) => {
-    if (!user?.id) return { error: 'Usuario no autenticado' }
+    if (!user?.id) {
+      console.error('❌ addTask: Usuario no autenticado')
+      return { error: 'Usuario no autenticado' }
+    }
+
 
     try {
+      // Preparar datos para Supabase
+      const dbData = {
+        user_id: user.id,
+        title: taskData.title,
+        description: taskData.notes || taskData.description || '',
+        deadline: taskData.deadline?.toISOString() || null,
+        amount: taskData.amount || null,
+        link: taskData.link || null,
+        is_big_3_today: taskData.important || false,
+        completed: false,
+        
+        // 🆕 CAMPOS DE SUBTAREAS:
+        parent_task_id: taskData.parent_task_id || null,
+        subtask_order: taskData.subtask_order || 0,
+        section_order: taskData.section_order || 0,
+        is_expanded: taskData.is_expanded || false
+      }
+      
+
       const { data, error } = await supabase
         .from('tasks')
-        .insert({
-          user_id: user.id,
-          title: taskData.title,
-          description: taskData.notes || taskData.description || '',
-          deadline: taskData.deadline?.toISOString() || null,
-          amount: taskData.amount || null,
-          link: taskData.link || null,
-          is_big_3_today: taskData.important || false,
-          completed: false
-        })
+        .insert(dbData)
         .select()
         .single()
 
-      if (error) throw error
+
+      if (error) {
+        console.error('Error de Supabase:', error)
+        throw error
+      }
+
 
       // Map to component format and add to state
       const newTask = {
@@ -152,13 +139,19 @@ export const useTasks = () => {
         link: data.link,
         created_at: data.created_at,
         updated_at: data.updated_at,
-        attachments: []
+        attachments: [],
+        
+        // 🆕 CAMPOS DE SUBTAREAS MAPEADOS:
+        parent_task_id: data.parent_task_id,
+        subtask_order: data.subtask_order || 0,
+        section_order: data.section_order || 0,
+        is_expanded: data.is_expanded || false
       }
 
       setTasks(prev => [newTask, ...prev])
       return { data: newTask, error: null }
     } catch (err) {
-      console.error('Error adding task:', err)
+      console.error('Error en addTask:', err)
       return { data: null, error: err.message }
     }
   }
@@ -190,14 +183,7 @@ export const useTasks = () => {
 
       if (error) {
         // Log detailed error information
-        console.error('❌ updateTask error:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-          updates: updates,
-          dbUpdates: dbUpdates
-        })
+        console.error('Error en updateTask:', error.message)
         throw error
       }
 
@@ -215,7 +201,7 @@ export const useTasks = () => {
 
       return { data, error: null }
     } catch (err) {
-      console.error('❌ updateTask failed:', err.message || err)
+      console.error('Error en updateTask:', err.message || err)
       return { data: null, error: err.message || err.toString() || 'Error desconocido en updateTask' }
     }
   }
@@ -341,6 +327,41 @@ export const useTasks = () => {
       console.error('Error deleting task:', err)
       return { error: err.message }
     }
+  }
+
+  // 🆕 FUNCIONES DE SUBTAREAS
+  const addSubtask = async (parentTaskId, subtaskData) => {
+    // Calcular siguiente orden de subtarea
+    const existingSubtasks = tasks.filter(t => t.parent_task_id === parentTaskId)
+    const nextOrder = existingSubtasks.length + 1
+
+    const taskDataToCreate = {
+      ...subtaskData,
+      parent_task_id: parentTaskId,
+      subtask_order: nextOrder,
+      completed: false
+    }
+    
+    const result = await addTask(taskDataToCreate)
+    
+    return result
+  }
+
+  const getSubtasks = (parentTaskId) => {
+    return tasks
+      .filter(task => task.parent_task_id === parentTaskId)
+      .sort((a, b) => (a.subtask_order || 0) - (b.subtask_order || 0))
+  }
+
+  const toggleTaskExpanded = async (taskId) => {
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return { error: 'Tarea no encontrada' }
+    
+    return await updateTask(taskId, { is_expanded: !task.is_expanded })
+  }
+
+  const deleteSubtask = async (subtaskId) => {
+    return await deleteTask(subtaskId)
   }
 
   // Set Big 3 tasks (for task selector)
@@ -505,6 +526,12 @@ export const useTasks = () => {
     loadTasks,
     addAttachment,
     deleteAttachment,
-    reloadTaskAttachments
+    reloadTaskAttachments,
+    
+    // 🆕 NUEVAS FUNCIONES DE SUBTAREAS
+    addSubtask,
+    getSubtasks,
+    toggleTaskExpanded,
+    deleteSubtask
   }
 }

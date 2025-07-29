@@ -3,15 +3,17 @@ import BaseCard from '../ui/BaseCard'
 import BaseButton from '../ui/BaseButton'
 import AttachmentItem from '../attachments/AttachmentItem'
 import { useGestures } from '@/hooks/useGestures'
-import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, Star, StarOff, Calendar, Link, Euro, Clock, MapPin, FileText, User } from 'lucide-react'
+import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, MapPin, FileText, User, Trash2 } from 'lucide-react'
 
-const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onAddAttachment, onDeleteAttachment, onReloadAttachments }) => {
+const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onAddAttachment, onDeleteAttachment, onReloadAttachments, subtasksCount = 0, getSubtasks, onToggleTaskComplete, addSubtask, deleteSubtask }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editedTask, setEditedTask] = useState(task)
   const [showAttachmentPanel, setShowAttachmentPanel] = useState(false)
   const [selectedAttachmentType, setSelectedAttachmentType] = useState(null)
   const [attachmentData, setAttachmentData] = useState({})
   const [taskAttachments, setTaskAttachments] = useState(task.attachments || [])
+  const [showAddSubtask, setShowAddSubtask] = useState(false)
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useGestures()
   
   // Handle swipe right to go back
@@ -137,16 +139,28 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     }
   }
 
+  const handleAddSubtask = async () => {
+    if (!newSubtaskTitle.trim()) return
+    
+    const result = await addSubtask(task.id, {
+      title: newSubtaskTitle.trim()
+    })
+    
+    if (!result.error) {
+      setNewSubtaskTitle('')
+      setShowAddSubtask(false)
+    } else {
+      console.error('Error al crear subtarea:', result.error)
+    }
+  }
+
   const handleAddAttachment = async (attachmentData) => {
     try {
-      console.log('🔍 DEBUG: Datos enviados:', attachmentData)
       const result = await onAddAttachment(task.id, attachmentData)
       
       if (result && !result.error) {
-        console.log('✅ SUCCESS: Attachment añadido')
         setTaskAttachments(prev => [...prev, result.data])
         
-        // ✅ FORZAR RECARGA INMEDIATA
         if (onReloadAttachments) {
           await onReloadAttachments(task.id)
         }
@@ -156,7 +170,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         setAttachmentData({})
       }
     } catch (error) {
-      console.error('❌ EXCEPTION en handleAddAttachment:', error)
+      console.error('Error añadiendo attachment:', error)
     }
   }
 
@@ -986,18 +1000,12 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                       key={attachment.id}
                       attachment={processedAttachment}
                       onDelete={async () => {
-                        console.log('🗑️ DEBUG: Eliminando attachment desde TaskDetailScreen')
-                        console.log('🗑️ DEBUG: Task ID:', task.id, 'Attachment ID:', attachment.id)
-                        
                         const result = await onDeleteAttachment(task.id, attachment.id)
-                        console.log('🗑️ DEBUG: Resultado eliminación:', result)
                         
                         if (!result?.error) {
-                          // ✅ ACTUALIZAR UI INMEDIATAMENTE
                           setTaskAttachments(prev => prev.filter(att => att.id !== attachment.id))
-                          console.log('✅ UI actualizada - attachment eliminado de la lista')
                         } else {
-                          console.error('❌ Error eliminando attachment:', result.error)
+                          console.error('Error eliminando attachment:', result.error)
                         }
                       }}
                     />
@@ -1014,6 +1022,112 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
           </div>
         </div>
 
+        {/* 🆕 SECCIÓN SUBTAREAS - SIEMPRE VISIBLE */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-4">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                📋 Subtareas ({subtasksCount})
+              </h3>
+              <button 
+                onClick={() => setShowAddSubtask(!showAddSubtask)}
+                className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+              >
+                {showAddSubtask ? 'Cancelar' : '+ Añadir'}
+              </button>
+            </div>
+
+            {/* Lista de subtareas - solo si hay alguna */}
+            {subtasksCount > 0 ? (
+              <div className="space-y-2 mb-4">
+                {getSubtasks(task.id).map(subtask => (
+                  <div 
+                    key={subtask.id} 
+                    onClick={() => onToggleTaskComplete(subtask.id)}
+                    className={`bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-purple-200 transition-all cursor-pointer p-3 transition-all duration-200 ease-out opacity-100 ${
+                      subtask.completed 
+                        ? 'border-green-200 bg-green-50' 
+                        : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="transition-colors text-green-500">
+                        {subtask.completed ? (
+                          <CircleCheck size={18} />
+                        ) : (
+                          <Circle size={18} />
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-sm font-medium transition-all duration-300 ${
+                          subtask.completed 
+                            ? 'text-green-700 line-through' 
+                            : 'text-gray-900'
+                        }`}>
+                          {subtask.title}
+                        </span>
+                      </div>
+
+                      {/* Botón eliminar */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteSubtask(subtask.id)
+                        }}
+                        className="text-red-400 hover:text-red-600 transition-colors p-1"
+                        title="Eliminar subtarea"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-gray-500 text-sm mb-4">
+                No hay subtareas creadas
+              </div>
+            )}
+
+            {/* Formulario para añadir subtarea */}
+            {showAddSubtask && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <input
+                  type="text"
+                  value={newSubtaskTitle}
+                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                  placeholder="Título de la subtarea..."
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddSubtask()
+                    }
+                  }}
+                  autoFocus
+                />
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={handleAddSubtask}
+                    disabled={!newSubtaskTitle.trim()}
+                    className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Añadir
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddSubtask(false)
+                      setNewSubtaskTitle('')
+                    }}
+                    className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-sm hover:bg-gray-400"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Botones de acción cuando está editando */}
         {isEditing && (

@@ -54,7 +54,10 @@ const TaskItApp = () => {
     deleteTask,
     addAttachment,
     deleteAttachment,
-    reloadTaskAttachments
+    reloadTaskAttachments,
+    getSubtasks,
+    addSubtask,
+    deleteSubtask
   } = useTasks()
   const { 
     rituals, 
@@ -423,6 +426,10 @@ const TaskItApp = () => {
   }
 
   if (currentView === 'task-detail' && selectedTask) {
+    // Calcular subtareas para el task seleccionado
+    const subtasksCount = selectedTask ? 
+      tasks.filter(t => t.parent_task_id === selectedTask.id).length : 0
+      
     return (
       <TaskDetailScreen 
         task={selectedTask}
@@ -462,6 +469,11 @@ const TaskItApp = () => {
         onAddAttachment={addAttachment}
         onDeleteAttachment={deleteAttachment}
         onReloadAttachments={reloadTaskAttachments}
+        subtasksCount={subtasksCount}
+        getSubtasks={getSubtasks}
+        onToggleTaskComplete={toggleComplete}
+        addSubtask={addSubtask}
+        deleteSubtask={deleteSubtask}
       />
     )
   }

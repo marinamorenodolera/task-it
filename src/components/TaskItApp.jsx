@@ -1013,16 +1013,15 @@ const TaskItApp = () => {
                     <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
                       <span>{activity.type}</span>
                       {activity.duration > 0 && (
-                        <span className="text-gray-500">⏱️ {activity.duration}min</span>
+                        <span className="text-gray-500">{activity.duration}min</span>
                       )}
                     </div>
                     <div className="text-xs text-gray-600 mt-1">
-                      📅 {new Date(activity.created_at).toLocaleDateString('es-ES')} • 
-                      ⏰ {activity.time ? activity.time.slice(0, 5) : new Date(activity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      📅 {new Date(activity.created_at).toLocaleDateString('es-ES')} · {activity.time ? activity.time.slice(0, 5) : new Date(activity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                     {activity.notes && (
                       <div className="text-xs text-gray-500 mt-1 truncate">
-                        📝 {activity.notes}
+                        {activity.notes}
                       </div>
                     )}
                   </div>

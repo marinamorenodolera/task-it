@@ -110,6 +110,8 @@ const TaskItApp = () => {
   const [showTaskCreatedModal, setShowTaskCreatedModal] = useState(false)
   const [createdTaskInfo, setCreatedTaskInfo] = useState(null)
   const [scrollPosition, setScrollPosition] = useState(null)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [navigationDirection, setNavigationDirection] = useState(null)
 
   // Voice recognition setup
   const recognition = useRef(null)
@@ -170,32 +172,60 @@ const TaskItApp = () => {
   }
 
   const handleTaskClick = (task) => {
-    const currentScrollY = window.scrollY  // NUEVA LÍNEA
-    setScrollPosition(currentScrollY)      // NUEVA LÍNEA
+    // Cross-browser scroll position - ARREGLA MOBILE ISSUES
+    const currentScrollY = window.pageYOffset || 
+                           document.documentElement.scrollTop || 
+                           window.scrollY || 0
     
-    setSelectedTask(task)
-    setCurrentView('task-detail')
-    // No tocar el resto del código existente
+    // Visual feedback - AÑADE UX PREMIUM
+    setIsNavigating(true)
+    setNavigationDirection('forward')
+    
+    // Guardar posición de forma segura
+    setScrollPosition(currentScrollY)
+    
+    // Micro-delay para feedback visual
+    setTimeout(() => {
+      setSelectedTask(task)
+      setCurrentView('task-detail')
+      
+      // Reset visual feedback después de transición
+      setTimeout(() => {
+        setIsNavigating(false)
+        setNavigationDirection(null)
+      }, 150)
+    }, 50)
   }
 
   const handleBackToMain = () => {
+    setIsNavigating(true)
+    setNavigationDirection('back')
     setCurrentView('main')
     setSelectedTask(null)
     setShouldAutoFocus(false)
     
-    // AGREGAR ESTE BLOQUE:
-    setTimeout(() => {
-      if (scrollPosition !== null) {
-        window.scrollTo(0, scrollPosition)
-        setScrollPosition(null)
-      }
-      
-      const activeElement = document.activeElement
-      if (activeElement && activeElement.tagName === 'INPUT') {
-        activeElement.blur()
-      }
-    }, 100)
-    // Fin del bloque agregado
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (scrollPosition !== null) {
+          // ✅ SCROLL INSTANTÁNEO Y PRECISO - NO SMOOTH
+          window.scrollTo(0, scrollPosition)
+          
+          setTimeout(() => {
+            setScrollPosition(null)
+            setIsNavigating(false)
+            setNavigationDirection(null)
+          }, 100)
+        } else {
+          setIsNavigating(false)
+          setNavigationDirection(null)
+        }
+        
+        const activeElement = document.activeElement
+        if (activeElement && activeElement.tagName === 'INPUT') {
+          activeElement.blur()
+        }
+      }, 50) // Timing más rápido
+    })
   }
 
   // Register navigation callback for intelligent Daily navigation
@@ -437,7 +467,12 @@ const TaskItApp = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen bg-gray-50 navigation-transition ${
+      isNavigating ? 'navigating' : ''
+    } ${
+      navigationDirection === 'forward' ? 'navigation-forward' : 
+      navigationDirection === 'back' ? 'navigation-back' : ''
+    }`}>
       {/* Header Móvil */}
       <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-4">

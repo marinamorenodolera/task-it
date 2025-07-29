@@ -88,13 +88,16 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     }
   }, [task.id, onReloadAttachments])
 
-  // Resetear scroll al cargar el componente (task details)
+  // Scroll to top SOLO al entrar a task detail (no al volver)
   React.useEffect(() => {
-    // Scroll to top when component mounts
+    // Solo hacer scroll to top si venimos de otra vista (no restoration)
     if (typeof window !== 'undefined') {
-      window.scrollTo(0, 0)
+      // Usar un delay para asegurar que el layout está completo
+      requestAnimationFrame(() => {
+        window.scrollTo(0, 0)
+      })
     }
-  }, [])
+  }, [task.id]) // Solo cuando cambia la tarea específica
 
   const attachmentTypes = [
     { id: 'image', label: 'Imagen', icon: '🖼️', color: 'pink' },
@@ -1010,6 +1013,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             )}
           </div>
         </div>
+
 
         {/* Botones de acción cuando está editando */}
         {isEditing && (

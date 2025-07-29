@@ -56,6 +56,7 @@ const TaskItApp = () => {
     deleteAttachment,
     reloadTaskAttachments,
     getSubtasks,
+    loadSubtasks,
     addSubtask,
     deleteSubtask
   } = useTasks()
@@ -115,6 +116,7 @@ const TaskItApp = () => {
   const [scrollPosition, setScrollPosition] = useState(null)
   const [isNavigating, setIsNavigating] = useState(false)
   const [navigationDirection, setNavigationDirection] = useState(null)
+  const [expandedTasks, setExpandedTasks] = useState([])
 
   // Voice recognition setup
   const recognition = useRef(null)
@@ -395,6 +397,20 @@ const TaskItApp = () => {
     }
   }
 
+  // Toggle task expansion
+  const onToggleExpanded = async (taskId) => {
+    const isCurrentlyExpanded = expandedTasks.includes(taskId)
+    
+    if (isCurrentlyExpanded) {
+      // Contraer
+      setExpandedTasks(prev => prev.filter(id => id !== taskId))
+    } else {
+      // Expandir - cargar subtareas primero
+      await loadSubtasks(taskId)
+      setExpandedTasks(prev => [...prev, taskId])
+    }
+  }
+
   // Calcular stats incluyendo todas las secciones (rituales + tareas)
   // Solo contamos tareas activas (no eliminadas, ya que tasks viene del hook filtrado)
   const activeTasks = tasks.filter(task => !task.completed) // Tareas pendientes
@@ -426,9 +442,8 @@ const TaskItApp = () => {
   }
 
   if (currentView === 'task-detail' && selectedTask) {
-    // Calcular subtareas para el task seleccionado
-    const subtasksCount = selectedTask ? 
-      tasks.filter(t => t.parent_task_id === selectedTask.id).length : 0
+    // Calcular subtareas para el task seleccionado usando el cache
+    const subtasksCount = selectedTask ? getSubtasks(selectedTask.id).length : 0
       
     return (
       <TaskDetailScreen 
@@ -471,6 +486,7 @@ const TaskItApp = () => {
         onReloadAttachments={reloadTaskAttachments}
         subtasksCount={subtasksCount}
         getSubtasks={getSubtasks}
+        loadSubtasks={loadSubtasks}
         onToggleTaskComplete={toggleComplete}
         addSubtask={addSubtask}
         deleteSubtask={deleteSubtask}
@@ -677,6 +693,10 @@ const TaskItApp = () => {
                   task={task}
                   onClick={() => handleTaskClick(task)}
                   onComplete={toggleTaskComplete}
+                  getSubtasks={getSubtasks}
+                  onToggleTaskComplete={toggleComplete}
+                  expandedTasks={expandedTasks}
+                  onToggleExpanded={onToggleExpanded}
                 />
               ))}
             </div>
@@ -704,6 +724,10 @@ const TaskItApp = () => {
                   task={task}
                   onClick={() => handleTaskClick(task)}
                   onComplete={toggleTaskComplete}
+                  getSubtasks={getSubtasks}
+                  onToggleTaskComplete={toggleComplete}
+                  expandedTasks={expandedTasks}
+                  onToggleExpanded={onToggleExpanded}
                 />
               ))}
             </div>
@@ -812,6 +836,10 @@ const TaskItApp = () => {
                   task={task}
                   onClick={() => handleTaskClick(task)}
                   onComplete={toggleTaskComplete}
+                  getSubtasks={getSubtasks}
+                  onToggleTaskComplete={toggleComplete}
+                  expandedTasks={expandedTasks}
+                  onToggleExpanded={onToggleExpanded}
                 />
               ))}
             </div>
@@ -1038,6 +1066,10 @@ const TaskItApp = () => {
                         task={item}
                         onClick={() => handleTaskClick(item)}
                         onComplete={toggleTaskComplete}
+                        getSubtasks={getSubtasks}
+                        onToggleTaskComplete={toggleComplete}
+                        expandedTasks={expandedTasks}
+                        onToggleExpanded={onToggleExpanded}
                       />
                     )}
                   </div>

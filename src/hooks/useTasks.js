@@ -32,6 +32,7 @@ export const useTasks = () => {
         .from('tasks')
         .select('*')
         .eq('user_id', user.id)
+        .is('parent_task_id', null)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -71,6 +72,10 @@ export const useTasks = () => {
 
       setTasks(mappedTasks)
       setError(null)
+      
+      // Cargar subtareas para todas las tareas principales
+      const subtasksPromises = mappedTasks.map(task => loadSubtasks(task.id))
+      await Promise.all(subtasksPromises)
       
       // Log successful load only once
       if (process.env.NODE_ENV === 'development' && mappedTasks.length > 0) {
@@ -208,7 +213,20 @@ export const useTasks = () => {
 
   // Toggle completion
   const toggleComplete = async (taskId) => {
-    const task = tasks.find(t => t.id === taskId)
+    // Buscar primero en tareas principales
+    let task = tasks.find(t => t.id === taskId)
+    
+    // Si no se encuentra, buscar en cache de subtareas
+    if (!task) {
+      for (const parentId of Object.keys(subtasksCache)) {
+        const subtask = subtasksCache[parentId].find(st => st.id === taskId)
+        if (subtask) {
+          task = subtask
+          break
+        }
+      }
+    }
+    
     if (!task) {
       return { error: 'Tarea no encontrada' }
     }
@@ -221,6 +239,22 @@ export const useTasks = () => {
         : t
     ))
 
+    // Actualizar cache de subtareas si es una subtarea
+    setSubtasksCache(prev => {
+      const updatedCache = { ...prev }
+      
+      // Buscar en qué parent está esta subtarea y actualizar
+      Object.keys(updatedCache).forEach(parentId => {
+        updatedCache[parentId] = updatedCache[parentId].map(subtask =>
+          subtask.id === taskId 
+            ? { ...subtask, completed: newCompletedState }
+            : subtask
+        )
+      })
+      
+      return updatedCache
+    })
+
     try {
       // 2. Actualizar en base de datos
       const result = await updateTask(taskId, { completed: newCompletedState })
@@ -230,6 +264,18 @@ export const useTasks = () => {
         setTasks(prev => prev.map(t => 
           t.id === taskId ? { ...task } : t
         ))
+        // Revertir cache de subtareas también
+        setSubtasksCache(prev => {
+          const updatedCache = { ...prev }
+          Object.keys(updatedCache).forEach(parentId => {
+            updatedCache[parentId] = updatedCache[parentId].map(subtask =>
+              subtask.id === taskId 
+                ? { ...subtask, completed: task.completed }
+                : subtask
+            )
+          })
+          return updatedCache
+        })
         return result
       }
       
@@ -246,6 +292,18 @@ export const useTasks = () => {
       setTasks(prev => prev.map(t => 
         t.id === taskId ? { ...task } : t
       ))
+      // Revertir cache de subtareas también
+      setSubtasksCache(prev => {
+        const updatedCache = { ...prev }
+        Object.keys(updatedCache).forEach(parentId => {
+          updatedCache[parentId] = updatedCache[parentId].map(subtask =>
+            subtask.id === taskId 
+              ? { ...subtask, completed: task.completed }
+              : subtask
+          )
+        })
+        return updatedCache
+      })
       return { error: error.message }
     }
   }
@@ -347,10 +405,50 @@ export const useTasks = () => {
     return result
   }
 
+  // Estado para cache de subtareas
+  const [subtasksCache, setSubtasksCache] = useState({})
+
+  // Versión síncrona para TaskCard (usa cache local)
   const getSubtasks = (parentTaskId) => {
-    return tasks
-      .filter(task => task.parent_task_id === parentTaskId)
-      .sort((a, b) => (a.subtask_order || 0) - (b.subtask_order || 0))
+    return subtasksCache[parentTaskId] || []
+  }
+
+  // Versión async para cargar subtareas desde BD
+  const loadSubtasks = async (parentTaskId) => {
+    if (!user?.id || !parentTaskId) return []
+    
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('parent_task_id', parentTaskId)
+        .order('subtask_order', { ascending: true })
+
+      if (error) throw error
+
+      // Mapear igual que loadTasks
+      const subtasks = data.map(task => ({
+        id: task.id,
+        title: task.title,
+        completed: task.completed,
+        parent_task_id: task.parent_task_id,
+        subtask_order: task.subtask_order,
+        created_at: task.created_at,
+        updated_at: task.updated_at
+      }))
+
+      // Actualizar cache
+      setSubtasksCache(prev => ({
+        ...prev,
+        [parentTaskId]: subtasks
+      }))
+
+      return subtasks
+    } catch (err) {
+      console.error('Error loading subtasks:', err)
+      return []
+    }
   }
 
   const toggleTaskExpanded = async (taskId) => {
@@ -531,6 +629,7 @@ export const useTasks = () => {
     // 🆕 NUEVAS FUNCIONES DE SUBTAREAS
     addSubtask,
     getSubtasks,
+    loadSubtasks,
     toggleTaskExpanded,
     deleteSubtask
   }

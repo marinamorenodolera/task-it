@@ -1,11 +1,16 @@
 import React, { useState } from 'react'
 import BaseCard from '../ui/BaseCard'
-import { Circle, CircleCheck } from 'lucide-react'
+import { Circle, CircleCheck, ChevronDown, ChevronUp } from 'lucide-react'
 import { useGestures } from '@/hooks/useGestures'
 
-const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReorder }) => {
+const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReorder, getSubtasks, onToggleTaskComplete, expandedTasks = [], onToggleExpanded }) => {
   const [isBeingReordered, setIsBeingReordered] = useState(false)
   const [checkboxPressed, setCheckboxPressed] = useState(false)
+  
+  // Calcular subtareas usando getSubtasks si está disponible
+  const subtasks = getSubtasks ? getSubtasks(task.id) : []
+  const hasSubtasks = subtasks.length > 0
+  const isExpanded = expandedTasks.includes(task.id)
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useGestures()
   const hasAdditionalContent = () => {
     return (task.attachments && task.attachments.length > 0) || 
@@ -56,23 +61,22 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
   }
 
   return (
-    <BaseCard
-      variant="interactive"
-      onClick={handleCardClick}
-      className={`p-3 transition-all duration-200 ease-out ${
-        task.justCompleted 
-          ? 'opacity-90' 
-          : 'opacity-100'
-      } ${
-        task.completed 
-          ? 'border-green-200 bg-green-50' 
-          : 'hover:border-purple-200 bg-white'
-      } ${isBeingReordered ? 'shadow-lg scale-105' : ''}`}
-      onTouchStart={(e) => handleTouchStart(e, handleLongPress)}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={(e) => handleTouchEnd(e, handleSwipeRight, null, handleTap)}
-    >
-      <div className="flex items-center gap-3">
+    <div>
+      <div
+        className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all cursor-pointer ${
+          task.justCompleted 
+            ? 'opacity-90' 
+            : 'opacity-100'
+        } ${
+          task.completed 
+            ? 'border-green-200 bg-green-50' 
+            : 'border-gray-200 hover:border-purple-200'
+        } ${isBeingReordered ? 'shadow-lg scale-105' : ''}`}
+        onClick={handleCardClick}
+        onTouchStart={(e) => handleTouchStart(e, handleLongPress)}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={(e) => handleTouchEnd(e, handleSwipeRight, null, handleTap)}
+      >
         <button 
           onPointerDown={(e) => {
             e.stopPropagation()
@@ -160,24 +164,60 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
         )}
         
         {/* Botón de expandir si hay subtareas */}
-        {task.subtasks && task.subtasks.length > 0 && (
+        {hasSubtasks && onToggleExpanded && (
           <button
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              // Toggle expand logic - handled by parent component
+              onToggleExpanded(task.id)
             }}
             onTouchEnd={(e) => {
               e.preventDefault()
               e.stopPropagation()
             }}
             className="text-gray-400 hover:text-gray-600 transition-colors"
+            title={isExpanded ? 'Contraer subtareas' : 'Expandir subtareas'}
           >
-            <span style={{ pointerEvents: 'none' }}>⌄</span>
+            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
         )}
       </div>
-    </BaseCard>
+      
+      
+      {/* Subtareas expandidas */}
+      {isExpanded && hasSubtasks && (
+        <div className="ml-6 mt-2 space-y-1">
+          {subtasks.map((subtask) => (
+            <div
+              key={subtask.id}
+              className="flex items-center gap-2 p-2 bg-gray-50 rounded"
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (onToggleTaskComplete) {
+                    onToggleTaskComplete(subtask.id)
+                  }
+                }}
+                className={`transition-colors ${
+                  subtask.completed ? 'text-green-500' : 'text-gray-400 hover:text-green-500'
+                }`}
+              >
+                {subtask.completed ? <CircleCheck size={14} /> : <Circle size={14} />}
+              </button>
+              
+              <span className={`text-xs flex-1 min-w-0 transition-all duration-300 ${
+                subtask.completed 
+                  ? 'text-green-700 line-through' 
+                  : 'text-gray-700'
+              }`}>
+                {subtask.title}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

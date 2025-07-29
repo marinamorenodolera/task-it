@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }) => {
           const { data: profileData } = await supabase
             .from('user_profiles')
             .select('*')
-            .eq('id', session.user.id)
+            .eq('user_id', session.user.id)
             .single()
           
           if (profileData) {
@@ -103,7 +103,7 @@ export const AuthProvider = ({ children }) => {
           const { data: profileData } = await supabase
             .from('user_profiles')
             .select('*')
-            .eq('id', session.user.id)
+            .eq('user_id', session.user.id)
             .single()
           
           setUser(session.user)
@@ -203,7 +203,7 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase
         .from('user_profiles')
         .update(updates)
-        .eq('id', user.id)
+        .eq('user_id', user.id)
         .select()
         .single()
 

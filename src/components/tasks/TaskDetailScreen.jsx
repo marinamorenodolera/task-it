@@ -1,11 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import BaseCard from '../ui/BaseCard'
 import BaseButton from '../ui/BaseButton'
 import AttachmentItem from '../attachments/AttachmentItem'
 import { useGestures } from '@/hooks/useGestures'
 import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, MapPin, FileText, User, Trash2 } from 'lucide-react'
 
-const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onAddAttachment, onDeleteAttachment, onReloadAttachments, subtasksCount = 0, getSubtasks, onToggleTaskComplete, addSubtask, deleteSubtask }) => {
+const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onAddAttachment, onDeleteAttachment, onReloadAttachments, subtasksCount = 0, getSubtasks, loadSubtasks, onToggleTaskComplete, addSubtask, deleteSubtask }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editedTask, setEditedTask] = useState(task)
   const [showAttachmentPanel, setShowAttachmentPanel] = useState(false)
@@ -14,6 +14,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   const [taskAttachments, setTaskAttachments] = useState(task.attachments || [])
   const [showAddSubtask, setShowAddSubtask] = useState(false)
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [subtasksLoaded, setSubtasksLoaded] = useState(false)
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useGestures()
   
   // Handle swipe right to go back
@@ -68,13 +69,13 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   }
 
   // Actualizar estados cuando cambie la tarea
-  React.useEffect(() => {
+  useEffect(() => {
     setEditedTask(task)
     setTaskAttachments(task.attachments || [])
   }, [task])
 
   // Mostrar/ocultar panel de attachments automáticamente cuando cambia modo edición
-  React.useEffect(() => {
+  useEffect(() => {
     if (isEditing) {
       setShowAttachmentPanel(true)
     } else {
@@ -84,14 +85,23 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   }, [isEditing])
 
   // Recargar attachments cuando cambie la tarea
-  React.useEffect(() => {
+  useEffect(() => {
     if (task.id && onReloadAttachments) {
       onReloadAttachments(task.id)
     }
   }, [task.id, onReloadAttachments])
 
+  // Cargar subtareas cuando se monta el componente
+  useEffect(() => {
+    if (task.id && loadSubtasks) {
+      loadSubtasks(task.id).then(() => {
+        setSubtasksLoaded(true)
+      })
+    }
+  }, [task.id, loadSubtasks])
+
   // Scroll to top SOLO al entrar a task detail (no al volver)
-  React.useEffect(() => {
+  useEffect(() => {
     // Solo hacer scroll to top si venimos de otra vista (no restoration)
     if (typeof window !== 'undefined') {
       // Usar un delay para asegurar que el layout está completo
@@ -1027,7 +1037,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
           <div className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">
-                📋 Subtareas ({subtasksCount})
+                📋 Subtareas ({getSubtasks(task.id).length})
               </h3>
               <button 
                 onClick={() => setShowAddSubtask(!showAddSubtask)}
@@ -1038,7 +1048,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             </div>
 
             {/* Lista de subtareas - solo si hay alguna */}
-            {subtasksCount > 0 ? (
+            {getSubtasks(task.id).length > 0 ? (
               <div className="space-y-2 mb-4">
                 {getSubtasks(task.id).map(subtask => (
                   <div 

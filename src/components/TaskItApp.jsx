@@ -122,6 +122,16 @@ const TaskItApp = () => {
   const recognition = useRef(null)
   const [voiceSupported, setVoiceSupported] = useState(false)
 
+  // Sincronizar selectedTask cuando tasks cambia
+  useEffect(() => {
+    if (selectedTask && tasks.length > 0) {
+      const updatedTask = tasks.find(t => t.id === selectedTask.id)
+      if (updatedTask && JSON.stringify(updatedTask) !== JSON.stringify(selectedTask)) {
+        setSelectedTask(updatedTask)
+      }
+    }
+  }, [tasks])
+
   useEffect(() => {
     // Check for daily reset when app loads
     if (checkDailyReset) {
@@ -465,13 +475,33 @@ const TaskItApp = () => {
         onToggleImportant={async (taskId) => {
           // ✅ Actualizar selectedTask inmediatamente para feedback visual
           if (selectedTask?.id === taskId) {
-            setSelectedTask({...selectedTask, important: !selectedTask.important})
+            const newImportantState = !selectedTask.important
+            setSelectedTask({...selectedTask, important: newImportantState})
+            
+            // Ejecutar toggleBig3 y verificar resultado
+            const result = await toggleBig3(taskId)
+            
+            // Si falló, revertir el cambio
+            if (result?.error) {
+              setSelectedTask({...selectedTask, important: !newImportantState})
+              alert(result.error)
+            } else {
+              // Actualizar con la tarea fresca del estado global
+              const updatedTask = tasks.find(t => t.id === taskId)
+              if (updatedTask) {
+                setSelectedTask(updatedTask)
+              }
+            }
+          } else {
+            await toggleBig3(taskId)
           }
-          await toggleBig3(taskId)
         }}
-        onUpdate={async (updatedTask) => {
-          await updateTask(updatedTask.id, updatedTask)
-          setSelectedTask(updatedTask)
+        onUpdate={async (taskId, updatedTask) => {
+          const result = await updateTask(taskId, updatedTask)
+          if (!result.error) {
+            setSelectedTask({...selectedTask, ...updatedTask})
+          }
+          return result
         }}
         onToggleWaitingStatus={async (taskId) => {
           // ✅ Actualizar selectedTask inmediatamente para feedback visual

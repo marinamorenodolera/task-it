@@ -40,8 +40,15 @@ export const useTasks = () => {
       // Map database fields to component expected format and load attachments
       const mappedTasks = await Promise.all(
         data.map(async (task) => {
-          // Load attachments for each task
-          const { data: attachments } = await attachmentService.getTaskAttachments(task.id)
+          // Load attachments for each task - safe loading to prevent blocking
+          let attachments = []
+          try {
+            const result = await attachmentService.getTaskAttachments(task.id)
+            attachments = result.data || []
+          } catch (err) {
+            console.warn('Error loading attachments for task', task.id, ':', err)
+            attachments = [] // Continue without attachments
+          }
           
           return {
             id: task.id,
@@ -467,19 +474,15 @@ export const useTasks = () => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
 
     try {
-      // First, remove Big 3 from all tasks
-      await supabase
-        .from('tasks')
-        .update({ is_big_3_today: false })
-        .eq('user_id', user.id)
+      // First, remove Big 3 from all tasks using updateTask for consistency
+      const currentBig3Tasks = tasks.filter(t => t.important)
+      for (const task of currentBig3Tasks) {
+        await updateTask(task.id, { important: false })
+      }
 
-      // Then, set Big 3 for selected tasks
-      if (taskIds.length > 0) {
-        await supabase
-          .from('tasks')
-          .update({ is_big_3_today: true })
-          .in('id', taskIds)
-          .eq('user_id', user.id)
+      // Then, set Big 3 for selected tasks using updateTask
+      for (const taskId of taskIds) {
+        await updateTask(taskId, { important: true })
       }
 
       // Reload tasks to reflect changes
@@ -599,7 +602,7 @@ export const useTasks = () => {
   }
 
   // Computed values
-  const importantTasks = tasks.filter(task => task.important && !task.completed && task.status !== 'pending')
+  const importantTasks = tasks.filter(task => task.important && !task.completed)
   const routineTasks = tasks.filter(task => !task.important && !task.completed && task.status !== 'pending')
   const waitingTasks = tasks.filter(task => task.status === 'pending' && !task.completed)
   const completedTasks = tasks.filter(task => task.completed)

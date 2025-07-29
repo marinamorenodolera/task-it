@@ -142,15 +142,21 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
   const handleSave = async () => {
     try {
-      await onUpdate(editedTask)
-      setIsEditing(false)
+      if (onUpdate) {
+        const result = await onUpdate(task.id, editedTask)
+        if (!result || !result.error) {
+          setIsEditing(false)
+        } else {
+          console.error('Error updating task:', result.error)
+        }
+      }
     } catch (error) {
       console.error('Error updating task:', error)
     }
   }
 
   const handleAddSubtask = async () => {
-    if (!newSubtaskTitle.trim()) return
+    if (!newSubtaskTitle.trim() || !addSubtask) return
     
     const result = await addSubtask(task.id, {
       title: newSubtaskTitle.trim()
@@ -159,6 +165,10 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     if (!result.error) {
       setNewSubtaskTitle('')
       setShowAddSubtask(false)
+      // Recargar subtareas para mostrar la nueva
+      if (loadSubtasks) {
+        await loadSubtasks(task.id)
+      }
     } else {
       console.error('Error al crear subtarea:', result.error)
     }

@@ -33,6 +33,7 @@ export const useTasks = () => {
         .select('*')
         .eq('user_id', user.id)
         .is('parent_task_id', null)
+        .order('section_order', { ascending: true })
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -469,6 +470,26 @@ export const useTasks = () => {
     return await deleteTask(subtaskId)
   }
 
+  const updateTaskOrder = async (taskId, newOrder) => {
+    if (!user?.id) return { error: 'Usuario no autenticado' }
+    
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ section_order: newOrder })
+        .eq('id', taskId)
+        .eq('user_id', user.id)
+      
+      if (error) throw error
+      
+      // ✅ NO RECARGAR - UI se actualiza optimísticamente en TaskItApp
+      return { error: null }
+    } catch (err) {
+      console.error('Error updating task order:', err)
+      return { error: err.message }
+    }
+  }
+
   // Set Big 3 tasks (for task selector)
   const setBig3Tasks = async (taskIds) => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
@@ -610,6 +631,7 @@ export const useTasks = () => {
 
   return {
     tasks,
+    setTasks, // ✅ EXPONER setTasks PARA ACTUALIZACIONES OPTIMISTAS
     loading,
     error,
     importantTasks,
@@ -634,6 +656,9 @@ export const useTasks = () => {
     getSubtasks,
     loadSubtasks,
     toggleTaskExpanded,
-    deleteSubtask
+    deleteSubtask,
+    
+    // 🆕 FUNCIÓN DE DRAG AND DROP
+    updateTaskOrder
   }
 }

@@ -3,7 +3,22 @@ import BaseCard from '../ui/BaseCard'
 import { Circle, CircleCheck, ChevronDown, ChevronUp } from 'lucide-react'
 import { useGestures } from '@/hooks/useGestures'
 
-const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReorder, getSubtasks, onToggleTaskComplete, expandedTasks = [], onToggleExpanded }) => {
+const TaskCard = ({ 
+  task, 
+  onClick, 
+  onComplete, 
+  onEdit, 
+  onToggleImportant, 
+  onReorder, 
+  getSubtasks, 
+  onToggleTaskComplete, 
+  expandedTasks = [], 
+  onToggleExpanded,
+  // ✅ NUEVOS PROPS PARA DRAG
+  dragAttributes = {},
+  dragListeners = {},
+  isDragging = false
+}) => {
   const [isBeingReordered, setIsBeingReordered] = useState(false)
   const [checkboxPressed, setCheckboxPressed] = useState(false)
   
@@ -54,8 +69,12 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
     }
   }
 
-  const handleCardClick = () => {
-    if (!isBeingReordered && !checkboxPressed && onClick) {
+  const handleCardClick = (e) => {
+    // Prevenir click durante drag
+    if (isDragging || isBeingReordered || checkboxPressed) return
+    
+    // Solo procesar click si no es un drag
+    if (onClick) {
       onClick()
     }
   }
@@ -63,7 +82,7 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
   return (
     <div>
       <div
-        className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all cursor-pointer ${
+        className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all touch-manipulation ${
           task.justCompleted 
             ? 'opacity-90' 
             : 'opacity-100'
@@ -71,11 +90,16 @@ const TaskCard = ({ task, onClick, onComplete, onEdit, onToggleImportant, onReor
           task.completed 
             ? 'border-green-200 bg-green-50' 
             : 'border-gray-200 hover:border-purple-200'
-        } ${isBeingReordered ? 'shadow-lg scale-105' : ''}`}
+        } ${
+          isDragging 
+            ? 'shadow-lg border-blue-300 cursor-grabbing' 
+            : isBeingReordered 
+            ? 'shadow-lg scale-105' 
+            : 'cursor-grab hover:shadow-md hover:scale-[1.02] hover:border-gray-300'
+        }`}
         onClick={handleCardClick}
-        onTouchStart={(e) => handleTouchStart(e, handleLongPress)}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={(e) => handleTouchEnd(e, handleSwipeRight, null, handleTap)}
+        {...dragAttributes}
+        {...dragListeners}
       >
         <button 
           onPointerDown={(e) => {

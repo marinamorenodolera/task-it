@@ -37,11 +37,31 @@ import TaskCard from '@/components/tasks/TaskCard'
 import BaseButton from '@/components/ui/BaseButton'
 import ActivitySettings from '@/components/activities/ActivitySettings'
 
+// ✅ DRAG AND DROP IMPORTS
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import SortableTaskCard from '@/components/tasks/SortableTaskCard'
+
 const TaskItApp = () => {
   const { user, loading, signOut } = useAuth()
   const { registerNavigationCallback, unregisterNavigationCallback } = useNavigation()
   const { 
     tasks, 
+    setTasks, // ✅ PARA ACTUALIZACIONES OPTIMISTAS
     importantTasks, 
     routineTasks, 
     waitingTasks,
@@ -58,7 +78,9 @@ const TaskItApp = () => {
     getSubtasks,
     loadSubtasks,
     addSubtask,
-    deleteSubtask
+    deleteSubtask,
+    updateTaskOrder,
+    loadTasks
   } = useTasks()
   const { 
     rituals, 
@@ -117,10 +139,26 @@ const TaskItApp = () => {
   const [isNavigating, setIsNavigating] = useState(false)
   const [navigationDirection, setNavigationDirection] = useState(null)
   const [expandedTasks, setExpandedTasks] = useState([])
+  
+  // ✅ DRAG AND DROP STATE
+  const [activeId, setActiveId] = useState(null)
+  const [draggedTask, setDraggedTask] = useState(null)
 
   // Voice recognition setup
   const recognition = useRef(null)
   const [voiceSupported, setVoiceSupported] = useState(false)
+  
+  // ✅ DRAG AND DROP SENSORS
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 3, // Reducido para mejor respuesta en desktop
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   // Sincronizar selectedTask cuando tasks cambia
   useEffect(() => {
@@ -385,6 +423,127 @@ const TaskItApp = () => {
     if (result?.error) {
       alert(result.error)
     }
+  }
+
+  // ✅ DRAG HANDLERS - OPTIMISTAS
+  const handleDragStart = (event) => {
+    const { active } = event
+    console.log('🚀 DRAG START:', active.id)
+    setActiveId(active.id)
+    
+    // Encontrar la tarea que se está arrastrando
+    const task = [...importantTasks, ...waitingTasks, ...routineTasks].find(t => t.id === active.id)
+    console.log('📋 Dragged task:', task)
+    setDraggedTask(task)
+  }
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event
+    console.log('🎯 DRAG END EVENT:', { activeId: active.id, overId: over?.id })
+    
+    setActiveId(null)
+    setDraggedTask(null)
+
+    if (!over || active.id === over.id) {
+      console.log('❌ DRAG CANCELLED - No over or same position')
+      return
+    }
+
+    // Determinar qué sección contiene la tarea
+    let sectionTasks = []
+    let sectionName = ''
+    
+    if (importantTasks.find(t => t.id === active.id)) {
+      sectionTasks = importantTasks
+      sectionName = 'important'
+    } else if (waitingTasks.find(t => t.id === active.id)) {
+      sectionTasks = waitingTasks  
+      sectionName = 'waiting'
+    } else if (routineTasks.find(t => t.id === active.id)) {
+      sectionTasks = routineTasks
+      sectionName = 'routine'
+    }
+    
+    console.log('📍 Section identified:', sectionName)
+    console.log('📋 Section tasks:', sectionTasks.map(t => ({id: t.id, title: t.title})))
+
+    const oldIndex = sectionTasks.findIndex(task => task.id === active.id)
+    const newIndex = sectionTasks.findIndex(task => task.id === over.id)
+    
+    console.log('📍 Indices:', { oldIndex, newIndex })
+
+    if (oldIndex === -1 || newIndex === -1) {
+      console.log('❌ DRAG FAILED - Invalid indices')
+      return
+    }
+
+    console.log('✅ STARTING REORDER PROCESS...')
+
+    // 1. REORDENAMIENTO OPTIMISTA INMEDIATO
+    const reorderedTasks = arrayMove(sectionTasks, oldIndex, newIndex)
+    console.log('🔄 Reordered tasks:', reorderedTasks.map(t => ({id: t.id, title: t.title, order: t.section_order})))
+    
+    // ✅ ACTUALIZACIÓN OPTIMISTA INMEDIATA DE UI
+    const updatedReorderedTasks = reorderedTasks.map((task, index) => ({
+      ...task,
+      section_order: index + 1
+    }))
+
+    // Actualizar estado inmediatamente sin recargar desde BD
+    console.log('🔄 Updating UI optimistically...')
+    
+    // Filtrar tareas de otras secciones y mantenerlas
+    const otherTasks = tasks.filter(task => {
+      // Excluir tareas de la sección actual
+      if (sectionName === 'routine' && !task.important && !task.completed && task.status !== 'pending') return false
+      if (sectionName === 'important' && task.important && !task.completed) return false  
+      if (sectionName === 'waiting' && task.status === 'pending' && !task.completed) return false
+      return true
+    })
+    
+    // ✅ ACTUALIZACIÓN OPTIMISTA INMEDIATA - Combinar tareas de otras secciones con las reordenadas
+    const newTasksArray = [...otherTasks, ...updatedReorderedTasks]
+    setTasks(newTasksArray)
+    console.log('✅ UI updated optimistically')
+    
+    // 2. PERSISTIR EN BD EN BACKGROUND SIN RECARGAR UI
+    setTimeout(async () => {
+      console.log('💾 Starting background save...')
+      let hasErrors = false
+      
+      // ✅ COMPARAR CON EL ORDEN ORIGINAL, NO CON section_order
+      for (let i = 0; i < reorderedTasks.length; i++) {
+        const reorderedTask = reorderedTasks[i]
+        const originalIndex = sectionTasks.findIndex(t => t.id === reorderedTask.id)
+        const newOrder = i + 1
+        const oldOrder = originalIndex + 1
+        
+        console.log(`📊 Task ${reorderedTask.title}: original position ${oldOrder} → new position ${newOrder}`)
+        
+        // ✅ ACTUALIZAR SIEMPRE si la posición cambió
+        if (oldOrder !== newOrder) {
+          console.log(`💾 Updating task ${reorderedTask.id} from position ${oldOrder} to ${newOrder}`)
+          try {
+            await updateTaskOrder(reorderedTask.id, newOrder)
+            console.log(`✅ Task ${reorderedTask.id} updated successfully`)
+          } catch (error) {
+            console.error('❌ Error updating task order:', error)
+            hasErrors = true
+          }
+        } else {
+          console.log(`⏭️ Task ${reorderedTask.title} stays in same position`)
+        }
+      }
+      
+      // ✅ SI HAY ERRORES, RECARGAR PARA RESTAURAR ORDEN ORIGINAL
+      if (hasErrors) {
+        console.log('🔄 Errors detected, reloading tasks to restore correct order...')
+        await loadTasks()
+        console.log('🔄 Tasks reloaded after errors')
+      } else {
+        console.log('✅ Background save completed successfully - UI already updated')
+      }
+    }, 100) // Pequeño delay para que el usuario vea el cambio inmediato
   }
 
   const addQuickOption = async (taskId, type, value) => {
@@ -709,27 +868,53 @@ const TaskItApp = () => {
       {/* Lista de Tareas */}
       <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
         
-        {/* Big 3 (Tareas Importantes) - PRIMERO (lo más importante) */}
+        {/* Big 3 (Tareas Importantes) - PRIMERO (lo más importante) - DRAGGABLE */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
             <Star className="text-yellow-500" size={20} />
             Big 3 - Tareas Importantes ({importantTasks.length}/3)
           </h2>
           {importantTasks.length > 0 ? (
-            <div className="space-y-2">
-              {importantTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onClick={() => handleTaskClick(task)}
-                  onComplete={toggleTaskComplete}
-                  getSubtasks={getSubtasks}
-                  onToggleTaskComplete={toggleComplete}
-                  expandedTasks={expandedTasks}
-                  onToggleExpanded={onToggleExpanded}
-                />
-              ))}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
+            >
+              <SortableContext 
+                items={importantTasks.map(task => task.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {importantTasks.map((task) => (
+                    <SortableTaskCard
+                      key={task.id}
+                      task={task}
+                      onClick={() => handleTaskClick(task)}
+                      onComplete={toggleTaskComplete}
+                      getSubtasks={getSubtasks}
+                      onToggleTaskComplete={toggleComplete}
+                      expandedTasks={expandedTasks}
+                      onToggleExpanded={onToggleExpanded}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+              
+              <DragOverlay>
+                {draggedTask ? (
+                  <div className="rotate-3 scale-105">
+                    <TaskCard 
+                      task={draggedTask}
+                      isDragging={true}
+                      getSubtasks={getSubtasks}
+                      expandedTasks={expandedTasks}
+                    />
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           ) : (
             <div className="text-center py-4 text-gray-400">
               <p className="text-sm">No hay tareas importantes seleccionadas</p>
@@ -737,7 +922,7 @@ const TaskItApp = () => {
           )}
         </div>
 
-        {/* En Espera - SEGUNDO (tareas esperando respuesta externa) */}
+        {/* En Espera - SEGUNDO (tareas esperando respuesta externa) - DRAGGABLE */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
             <span className="text-xl">⏳</span>
@@ -747,20 +932,33 @@ const TaskItApp = () => {
             Tareas iniciadas esperando respuesta o feedback externo.
           </p>
           {waitingTasks.length > 0 ? (
-            <div className="space-y-2">
-              {waitingTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onClick={() => handleTaskClick(task)}
-                  onComplete={toggleTaskComplete}
-                  getSubtasks={getSubtasks}
-                  onToggleTaskComplete={toggleComplete}
-                  expandedTasks={expandedTasks}
-                  onToggleExpanded={onToggleExpanded}
-                />
-              ))}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
+            >
+              <SortableContext 
+                items={waitingTasks.map(task => task.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {waitingTasks.map((task) => (
+                    <SortableTaskCard
+                      key={task.id}
+                      task={task}
+                      onClick={() => handleTaskClick(task)}
+                      onComplete={toggleTaskComplete}
+                      getSubtasks={getSubtasks}
+                      onToggleTaskComplete={toggleComplete}
+                      expandedTasks={expandedTasks}
+                      onToggleExpanded={onToggleExpanded}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           ) : (
             <div className="text-center py-4 text-gray-400">
               <p className="text-sm">No hay tareas en espera</p>
@@ -850,7 +1048,7 @@ const TaskItApp = () => {
           </div>
         </div>
 
-        {/* Otras Tareas - CUARTO (tareas no importantes creadas rápidas) */}
+        {/* Otras Tareas - CUARTO (tareas no importantes creadas rápidas) - DRAGGABLE */}
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-3">
             Otras Tareas ({routineTasks.length})
@@ -859,20 +1057,33 @@ const TaskItApp = () => {
             Tareas creadas rápidas. Selecciona las más importantes para Big 3.
           </p>
           {routineTasks.length > 0 ? (
-            <div className="space-y-2">
-              {routineTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onClick={() => handleTaskClick(task)}
-                  onComplete={toggleTaskComplete}
-                  getSubtasks={getSubtasks}
-                  onToggleTaskComplete={toggleComplete}
-                  expandedTasks={expandedTasks}
-                  onToggleExpanded={onToggleExpanded}
-                />
-              ))}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
+            >
+              <SortableContext 
+                items={routineTasks.map(task => task.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {routineTasks.map((task) => (
+                    <SortableTaskCard
+                      key={task.id}
+                      task={task}
+                      onClick={() => handleTaskClick(task)}
+                      onComplete={toggleTaskComplete}
+                      getSubtasks={getSubtasks}
+                      onToggleTaskComplete={toggleComplete}
+                      expandedTasks={expandedTasks}
+                      onToggleExpanded={onToggleExpanded}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           ) : (
             <div className="text-center py-4 text-gray-400">
               <p className="text-sm">No hay tareas creadas</p>

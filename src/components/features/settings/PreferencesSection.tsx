@@ -54,7 +54,7 @@ export default function PreferencesSection() {
   const [editingSectionId, setEditingSectionId] = useState(null)
 
   // FUNCIÓN renderIcon ACTUALIZADA
-  const renderIcon = (iconName, size = 20, className = '') => {
+  const renderIcon = (iconName: string, size: number = 20, className: string = '') => {
     const iconData = ICON_OPTIONS.find(opt => opt.name === iconName)
     if (!iconData) {
       return <Folder size={size} className={`text-gray-500 ${className}`} />

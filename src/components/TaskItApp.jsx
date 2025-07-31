@@ -5,6 +5,7 @@ import {
   MicOff, 
   CheckCircle2,
   Circle,
+  CircleDot,
   Zap,
   Activity,
   MessageSquare,
@@ -19,12 +20,18 @@ import {
   ChevronUp,
   Settings,
   Target,
-  Trash2
+  LayoutGrid,
+  Trash2,
+  // ICONOS PARA SECCIONES:
+  Folder, Flame, Lightbulb, Home,
+  Rocket, BarChart, Briefcase, Palette,
+  Heart, Shield, Trophy, Users as UsersIcon, Settings as SettingsIcon
 } from 'lucide-react'
 
 import { useAuth } from '@/hooks/useAuth'
 import { useTasks } from '@/hooks/useTasks'
 import { useRituals } from '@/hooks/useRituals'
+import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { useActivities } from '@/hooks/useActivities'
 import { useNavigation } from '@/hooks/useNavigation'
 import { parseNaturalLanguage, formatDeadline } from '@/utils/dateHelpers'
@@ -36,6 +43,7 @@ import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
 import TaskCard from '@/components/tasks/TaskCard'
 import BaseButton from '@/components/ui/BaseButton'
 import ActivitySettings from '@/components/activities/ActivitySettings'
+import PreferencesSection from '@/components/features/settings/PreferencesSection'
 
 // ✅ DRAG AND DROP IMPORTS
 import {
@@ -65,12 +73,15 @@ const TaskItApp = () => {
     importantTasks, 
     routineTasks, 
     waitingTasks,
+    urgentTasks,
+    completedTasks,
     big3Count,
     addTask, 
     updateTask, 
     toggleComplete, 
     toggleBig3,
     toggleWaitingStatus,
+    toggleUrgent,
     deleteTask,
     addAttachment,
     deleteAttachment,
@@ -82,6 +93,8 @@ const TaskItApp = () => {
     updateTaskOrder,
     loadTasks
   } = useTasks()
+  
+  
   const { 
     rituals, 
     completedCount: completedRituals, 
@@ -104,6 +117,297 @@ const TaskItApp = () => {
     getActivityStats,
     checkDailyReset
   } = useActivities()
+  
+  // USER PREFERENCES HOOK
+  const { 
+    sectionOrder: userSectionOrder, 
+    visibleSections
+  } = useUserPreferences()
+  
+
+  // Importar función shared para iconos
+  const renderSectionIcon = (iconName, size = 20) => {
+    
+    const iconMap = {
+      folder: { icon: Folder, color: 'text-blue-500' },
+      flame: { icon: Flame, color: 'text-red-500' },
+      zap: { icon: Zap, color: 'text-purple-500' },
+      calendar: { icon: Calendar, color: 'text-green-500' },
+      target: { icon: Target, color: 'text-purple-500' },
+      lightbulb: { icon: Lightbulb, color: 'text-amber-500' },
+      rocket: { icon: Rocket, color: 'text-indigo-500' },
+      'bar-chart': { icon: BarChart, color: 'text-cyan-500' },
+      star: { icon: Star, color: 'text-yellow-500' },
+      briefcase: { icon: Briefcase, color: 'text-gray-600' },
+      home: { icon: Home, color: 'text-green-600' },
+      palette: { icon: Palette, color: 'text-pink-500' },
+      clock: { icon: Clock, color: 'text-orange-500' },
+      heart: { icon: Heart, color: 'text-red-400' },
+      shield: { icon: Shield, color: 'text-emerald-500' },
+      'check-circle': { icon: CheckCircle2, color: 'text-green-500' },
+      trophy: { icon: Trophy, color: 'text-yellow-600' },
+      users: { icon: UsersIcon, color: 'text-blue-600' },
+      settings: { icon: SettingsIcon, color: 'text-gray-500' },
+      // Emoji mappings
+      '⭐': { icon: Star, color: 'text-yellow-500' },
+      '⚡': { icon: Zap, color: 'text-purple-500' },
+      '⏳': { icon: Clock, color: 'text-orange-500' },
+      '📋': { icon: Folder, color: 'text-blue-500' },
+      '✅': { icon: CheckCircle2, color: 'text-green-500' }
+    }
+    
+    const iconData = iconMap[iconName]
+    console.log('🔍 Icon data found:', iconData)
+    
+    if (!iconData) {
+      console.log('❌ No icon data found, using default folder')
+      return <Folder size={size} className="text-gray-500" />
+    }
+    
+    const IconComponent = iconData.icon
+    return <IconComponent size={size} className={iconData.color} />
+  }
+
+  // FUNCIÓN PARA OBTENER TAREAS DE CADA SECCIÓN
+  const getSectionTasks = (sectionId) => {
+    switch(sectionId) {
+      case 'big3':
+        return importantTasks || []
+      case 'urgent':
+        if (urgentTasks?.length > 0) {
+          console.log('🔥 URGENT SECTION RENDERING:', urgentTasks.length, 'tasks')
+        }
+        return urgentTasks || []
+      case 'waiting':  
+        return waitingTasks || []
+      case 'routine':
+        return routineTasks || []
+      case 'completed':
+        return completedTasks || []
+      default:
+        // ✅ MANEJAR SECCIONES CUSTOM
+        if (sectionId.startsWith('custom_')) {
+          return tasks.filter(task => 
+            task.section_id === sectionId && !task.completed
+          ) || []
+        }
+        return []
+    }
+  }
+
+  // FUNCIÓN PARA RENDERIZAR UNA SECCIÓN
+  const renderSection = (section) => {
+    if (!section.visible) return null
+
+    // Caso especial para rituales
+    if (section.id === 'rituals') {
+      return (
+        <div key={section.id}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              {renderSectionIcon(section.icon)}
+              {section.name} ({completedRituals}/{totalRituals})
+              <span className="text-xs text-gray-500 font-normal">Reset: 6:00 AM</span>
+            </h2>
+          </div>
+          
+          <div className="space-y-2">
+            {rituals.map((ritual) => (
+              <div key={ritual.id}>
+                <div
+                  className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all cursor-pointer ${
+                    ritual.completed 
+                      ? 'border-green-200 bg-green-50' 
+                      : 'border-gray-200 hover:border-purple-200'
+                  }`}
+                  onClick={() => setExpandedRitual(expandedRitual === ritual.id ? null : ritual.id)}
+                >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleRitual(ritual.id)
+                    }}
+                    className={`transition-colors ${
+                      ritual.completed 
+                        ? 'text-green-500' 
+                        : 'text-gray-400 hover:text-purple-500'
+                    }`}
+                  >
+                    {ritual.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                  </button>
+                  
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-sm font-medium ${
+                      ritual.completed 
+                        ? 'text-green-700 line-through' 
+                        : 'text-gray-900'
+                    }`}>
+                      {ritual.title}
+                    </span>
+                  </div>
+
+                  {expandedRitual === ritual.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </div>
+
+                {/* Subtasks expandidas - ESTRUCTURA ORIGINAL */}
+                {expandedRitual === ritual.id && ritual.subtasks && (
+                  <div className="ml-6 mt-2 space-y-1">
+                    {ritual.subtasks.map((subtask) => (
+                      <div
+                        key={subtask.id}
+                        className="flex items-center gap-2 p-2 bg-gray-50 rounded"
+                      >
+                        <button
+                          onClick={() => toggleSubtask(ritual.id, subtask.id)}
+                          className={`transition-colors ${
+                            subtask.completed 
+                              ? 'text-green-500' 
+                              : 'text-gray-400 hover:text-green-500'
+                          }`}
+                        >
+                          {subtask.completed ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+                        </button>
+                        <span className={`text-xs ${
+                          subtask.completed 
+                            ? 'text-green-700 line-through' 
+                            : 'text-gray-700'
+                        }`}>
+                          {subtask.text || subtask.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    // Caso especial para tareas completadas
+    if (section.id === 'completed') {
+      const allCompletedItems = [
+        ...rituals.filter(ritual => ritual.completed),
+        ...(completedTasks || [])
+      ]
+      
+      if (allCompletedItems.length === 0) return null
+      
+      return (
+        <div key={section.id}>
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={() => setShowCompletedTasks(!showCompletedTasks)}
+              className="flex items-center gap-2 text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors"
+            >
+              {renderSectionIcon(section.icon)}
+              {section.name} ({allCompletedItems.length})
+              {showCompletedTasks ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
+          
+          {showCompletedTasks && (
+            <div className="space-y-2">
+              {allCompletedItems.map((item) => (
+                <div key={`${item.id}-${item.type || 'task'}`} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all cursor-pointer"
+                  onClick={() => {
+                    console.log('🔄 Completed item clicked:', item.id, 'Type:', item.type || 'task')
+                    if (item.type === 'task' || !item.type) {
+                      toggleTaskComplete(item.id)
+                    }
+                  }}
+                >
+                  <button className="transition-colors text-green-500">
+                    <CheckCircle2 size={18} style={{ pointerEvents: 'none' }} />
+                  </button>
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <span className="text-sm font-medium text-green-700 line-through">
+                      {item.title || item.text}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Secciones normales (big3, waiting, routine, custom)
+    const sectionTasks = getSectionTasks(section.id)
+    
+    // Renderizado colapsado para secciones vacías
+    if (sectionTasks.length === 0) {
+      return (
+        <div key={section.id}>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            {renderSectionIcon(section.icon)}
+            {section.name} (0)
+            {section.id === 'big3' && '/3'}
+          </h2>
+        </div>
+      )
+    }
+    
+    // Renderizado completo para secciones con tareas
+    return (
+      <div key={section.id}>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          {renderSectionIcon(section.icon)}
+          {section.name} ({sectionTasks.length})
+          {section.id === 'big3' && '/3'}
+        </h2>
+        
+        {section.id === 'urgent' && (
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas que requieren atención inmediata y máxima prioridad.
+          </p>
+        )}
+        
+        {section.id === 'waiting' && (
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas iniciadas esperando respuesta o feedback externo.
+          </p>
+        )}
+        
+        {section.id === 'routine' && (
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas creadas rápidas. Selecciona las más importantes para Big 3.
+          </p>
+        )}
+        
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          modifiers={[restrictToVerticalAxis]}
+        >
+          <SortableContext 
+            items={sectionTasks.map(task => task.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-2">
+              {sectionTasks.map((task) => (
+                <SortableTaskCard
+                  key={task.id}
+                  task={task}
+                  onClick={() => handleTaskClick(task)}
+                  onComplete={toggleTaskComplete}
+                  getSubtasks={getSubtasks}
+                  expandedTasks={expandedTasks}
+                  onToggleExpanded={onToggleExpanded}
+                  onToggleTaskComplete={toggleComplete}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      </div>
+    )
+  }
+  
   // Local state
   const [quickCapture, setQuickCapture] = useState('')
   const [isListening, setIsListening] = useState(false)
@@ -116,6 +420,8 @@ const TaskItApp = () => {
   const [expandedRitual, setExpandedRitual] = useState(null)
   const [showTaskSelector, setShowTaskSelector] = useState(false)
   const [showRitualsConfig, setShowRitualsConfig] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showSectionSettings, setShowSectionSettings] = useState(false)
   const [showActivityForm, setShowActivityForm] = useState(false)
   const [newActivity, setNewActivity] = useState({ 
     type: '', 
@@ -306,17 +612,17 @@ const TaskItApp = () => {
       try {
         // Separar rituales y tareas
         const completedRituals = allCompletedItems.filter(item => item.subtasks)
-        const completedTasks = allCompletedItems.filter(item => !item.subtasks)
+        const completedTasksToDelete = allCompletedItems.filter(item => !item.subtasks)
         
         // Eliminar tareas completadas usando deleteTask
-        for (const task of completedTasks) {
+        for (const task of completedTasksToDelete) {
           await deleteTask(task.id)
         }
         
         // Para rituales, solo los quitamos de la vista (se resetean diariamente automáticamente)
         // No hacemos nada con los rituales completados, se resetean solos a las 6 AM
         
-        console.log(`${completedTasks.length} tareas eliminadas y ${completedRituals.length} rituales reseteados`)
+        console.log(`${completedTasksToDelete.length} tareas eliminadas y ${completedRituals.length} rituales reseteados`)
       } catch (error) {
         console.error('Error al eliminar tareas completadas:', error)
         alert('Hubo un error al eliminar las tareas. Inténtalo de nuevo.')
@@ -670,6 +976,14 @@ const TaskItApp = () => {
           }
           await toggleWaitingStatus(taskId)
         }}
+        onToggleUrgent={async (taskId) => {
+          // ✅ Actualizar selectedTask inmediatamente para feedback visual
+          if (selectedTask?.id === taskId) {
+            const newPriority = selectedTask.priority === 'urgent' ? 'normal' : 'urgent' 
+            setSelectedTask({...selectedTask, priority: newPriority})
+          }
+          await toggleUrgent(taskId)
+        }}
         onAddAttachment={addAttachment}
         onDeleteAttachment={deleteAttachment}
         onReloadAttachments={reloadTaskAttachments}
@@ -696,9 +1010,9 @@ const TaskItApp = () => {
           <h1 className="text-xl font-bold text-gray-900">Task-It</h1>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowRitualsConfig(true)}
+              onClick={() => setShowSettingsModal(true)}
               className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
-              title="Configuración de rituales"
+              title="Configuración"
             >
               <Settings size={20} />
             </button>
@@ -807,12 +1121,11 @@ const TaskItApp = () => {
         <div className="flex gap-2 mt-3">
           <button
             onClick={() => setShowTaskSelector(true)}
-            disabled={big3Count >= 3}
-            className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+            className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors touch-manipulation"
           >
-            <Target size={16} />
+            <CircleDot size={16} className="text-green-700" />
             <span className="text-xs sm:text-sm font-medium">
-              <span className="hidden sm:inline">Seleccionar </span>Big 3
+              <span className="hidden sm:inline">Gestionar </span>Tareas
             </span>
           </button>
           
@@ -868,474 +1181,8 @@ const TaskItApp = () => {
       {/* Lista de Tareas */}
       <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
         
-        {/* Big 3 (Tareas Importantes) - PRIMERO (lo más importante) - DRAGGABLE */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <Star className="text-yellow-500" size={20} />
-            Big 3 - Tareas Importantes ({importantTasks.length}/3)
-          </h2>
-          {importantTasks.length > 0 ? (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              modifiers={[restrictToVerticalAxis]}
-            >
-              <SortableContext 
-                items={importantTasks.map(task => task.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-2">
-                  {importantTasks.map((task) => (
-                    <SortableTaskCard
-                      key={task.id}
-                      task={task}
-                      onClick={() => handleTaskClick(task)}
-                      onComplete={toggleTaskComplete}
-                      getSubtasks={getSubtasks}
-                      onToggleTaskComplete={toggleComplete}
-                      expandedTasks={expandedTasks}
-                      onToggleExpanded={onToggleExpanded}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-              
-              <DragOverlay>
-                {draggedTask ? (
-                  <div className="rotate-3 scale-105">
-                    <TaskCard 
-                      task={draggedTask}
-                      isDragging={true}
-                      getSubtasks={getSubtasks}
-                      expandedTasks={expandedTasks}
-                    />
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-          ) : (
-            <div className="text-center py-4 text-gray-400">
-              <p className="text-sm">No hay tareas importantes seleccionadas</p>
-            </div>
-          )}
-        </div>
-
-        {/* En Espera - SEGUNDO (tareas esperando respuesta externa) - DRAGGABLE */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <span className="text-xl">⏳</span>
-            En Espera ({waitingTasks.length})
-          </h2>
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas iniciadas esperando respuesta o feedback externo.
-          </p>
-          {waitingTasks.length > 0 ? (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              modifiers={[restrictToVerticalAxis]}
-            >
-              <SortableContext 
-                items={waitingTasks.map(task => task.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-2">
-                  {waitingTasks.map((task) => (
-                    <SortableTaskCard
-                      key={task.id}
-                      task={task}
-                      onClick={() => handleTaskClick(task)}
-                      onComplete={toggleTaskComplete}
-                      getSubtasks={getSubtasks}
-                      onToggleTaskComplete={toggleComplete}
-                      expandedTasks={expandedTasks}
-                      onToggleExpanded={onToggleExpanded}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-          ) : (
-            <div className="text-center py-4 text-gray-400">
-              <p className="text-sm">No hay tareas en espera</p>
-            </div>
-          )}
-        </div>
-
-        {/* Daily Rituals - TERCERO */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Zap className="text-purple-500" size={20} />
-              Daily Rituals ({completedRituals}/{totalRituals})
-              <span className="text-xs text-gray-500 font-normal">Reset: 6:00 AM</span>
-            </h2>
-          </div>
-          
-          <div className="space-y-2">
-            {rituals.map((ritual) => (
-              <div key={ritual.id}>
-                <div
-                  className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all cursor-pointer ${
-                    ritual.completed 
-                      ? 'border-green-200 bg-green-50' 
-                      : 'border-gray-200 hover:border-purple-200'
-                  }`}
-                  onClick={() => setExpandedRitual(expandedRitual === ritual.id ? null : ritual.id)}
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleRitual(ritual.id)
-                    }}
-                    className={`transition-colors ${
-                      ritual.completed 
-                        ? 'text-green-500' 
-                        : 'text-gray-400 hover:text-purple-500'
-                    }`}
-                  >
-                    {ritual.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
-                  </button>
-                  
-                  <div className="flex-1 min-w-0">
-                    <span className={`text-sm font-medium ${
-                      ritual.completed 
-                        ? 'text-green-700 line-through' 
-                        : 'text-gray-900'
-                    }`}>
-                      {ritual.title}
-                    </span>
-                  </div>
-
-                  {expandedRitual === ritual.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </div>
-
-                {/* Subtasks expandidas */}
-                {expandedRitual === ritual.id && ritual.subtasks && (
-                  <div className="ml-6 mt-2 space-y-1">
-                    {ritual.subtasks.map((subtask) => (
-                      <div
-                        key={subtask.id}
-                        className="flex items-center gap-2 p-2 bg-gray-50 rounded"
-                      >
-                        <button
-                          onClick={() => toggleSubtask(ritual.id, subtask.id)}
-                          className={`transition-colors ${
-                            subtask.completed 
-                              ? 'text-green-500' 
-                              : 'text-gray-400 hover:text-green-500'
-                          }`}
-                        >
-                          {subtask.completed ? <CheckCircle2 size={14} /> : <Circle size={14} />}
-                        </button>
-                        <span className={`text-xs ${
-                          subtask.completed 
-                            ? 'text-green-700 line-through' 
-                            : 'text-gray-700'
-                        }`}>
-                          {subtask.text || subtask.title}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Otras Tareas - CUARTO (tareas no importantes creadas rápidas) - DRAGGABLE */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">
-            Otras Tareas ({routineTasks.length})
-          </h2>
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas creadas rápidas. Selecciona las más importantes para Big 3.
-          </p>
-          {routineTasks.length > 0 ? (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              modifiers={[restrictToVerticalAxis]}
-            >
-              <SortableContext 
-                items={routineTasks.map(task => task.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-2">
-                  {routineTasks.map((task) => (
-                    <SortableTaskCard
-                      key={task.id}
-                      task={task}
-                      onClick={() => handleTaskClick(task)}
-                      onComplete={toggleTaskComplete}
-                      getSubtasks={getSubtasks}
-                      onToggleTaskComplete={toggleComplete}
-                      expandedTasks={expandedTasks}
-                      onToggleExpanded={onToggleExpanded}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-          ) : (
-            <div className="text-center py-4 text-gray-400">
-              <p className="text-sm">No hay tareas creadas</p>
-            </div>
-          )}
-        </div>
-
-        {/* Enhanced Activity Tracker */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Activity className="text-green-500" size={20} />
-              Actividades
-              <span className="text-sm text-gray-500 font-normal">({activityStats.totalTimeToday} min hoy)</span>
-            </h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentView('activity-settings')}
-                className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
-                title="Configurar actividades predeterminadas"
-              >
-                <Settings size={16} />
-              </button>
-              <button
-                onClick={() => setShowActivityForm(!showActivityForm)}
-                className="px-3 py-1 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors"
-              >
-                + Añadir
-              </button>
-            </div>
-          </div>
-
-          {/* Enhanced Activity Form */}
-          {showActivityForm && (
-            <div className="mb-4 p-4 bg-white rounded-xl border border-gray-200 space-y-4">
-              {/* Actividades Predeterminadas */}
-              {predefinedActivities.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Actividades rápidas:</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    {predefinedActivities.map((template) => (
-                      <button
-                        key={template.id}
-                        onClick={() => {
-                          setNewActivity({
-                            ...newActivity,
-                            type: template.type,
-                            duration: template.duration.toString(),
-                            notes: template.notes
-                          })
-                        }}
-                        className={`p-3 rounded-lg border border-${template.color}-200 bg-${template.color}-50 hover:bg-${template.color}-100 transition-colors text-left`}
-                      >
-                        <div className={`text-sm font-medium text-${template.color}-800`}>
-                          {template.type}
-                        </div>
-                        <div className={`text-xs text-${template.color}-600`}>
-                          {template.duration} min
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Formulario Manual */}
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    placeholder="Tipo de actividad..."
-                    value={newActivity.type}
-                    onChange={(e) => setNewActivity({...newActivity, type: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Duración (min)"
-                    value={newActivity.duration}
-                    onChange={(e) => setNewActivity({...newActivity, duration: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="date"
-                    value={newActivity.date}
-                    onChange={(e) => setNewActivity({...newActivity, date: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
-                  />
-                  <input
-                    type="time"
-                    value={newActivity.time}
-                    onChange={(e) => setNewActivity({...newActivity, time: e.target.value})}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[44px]"
-                  />
-                </div>
-
-                <textarea
-                  placeholder="Notas (opcional)..."
-                  value={newActivity.notes}
-                  onChange={(e) => setNewActivity({...newActivity, notes: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  rows="2"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={handleAddActivity}
-                  disabled={!newActivity.type || !newActivity.duration}
-                  className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
-                >
-                  Guardar
-                </button>
-                <button
-                  onClick={() => setShowActivityForm(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px]"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Activities List */}
-          <div className="space-y-2">
-            {todayActivities?.slice(0, 5).map((activity) => (
-              <div key={activity.id} className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
-                {/* Contenido principal - clickeable */}
-                <div 
-                  onClick={() => setSelectedActivity(activity)}
-                  className="flex-1 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors rounded-lg p-1 -m-1"
-                >
-                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
-                      <span>{activity.type}</span>
-                      {activity.duration > 0 && (
-                        <span className="text-gray-500">{activity.duration}min</span>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      📅 {new Date(activity.created_at).toLocaleDateString('es-ES')} · {activity.time ? activity.time.slice(0, 5) : new Date(activity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    {activity.notes && (
-                      <div className="text-xs text-gray-500 mt-1 truncate">
-                        {activity.notes}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Botón eliminar - NO clickeable para modal */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    const confirmDelete = window.confirm('¿Eliminar esta actividad?')
-                    if (confirmDelete) {
-                      deleteActivity(activity.id)
-                    }
-                  }}
-                  className="text-red-500 hover:text-red-700 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors"
-                  title="Eliminar actividad"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Tareas Completadas - AL FINAL */}
-        {allCompletedItems.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <button
-                onClick={() => setShowCompletedTasks(!showCompletedTasks)}
-                className="flex items-center gap-2 text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors"
-              >
-                <CheckCircle2 className="text-green-500" size={20} />
-                Tareas Completadas ({allCompletedItems.length})
-                {showCompletedTasks ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </button>
-              
-              <button
-                onClick={handleDeleteAllCompleted}
-                className="text-blue-600 hover:text-blue-800 text-sm transition-colors"
-              >
-                Borrar todas
-              </button>
-            </div>
-
-            {showCompletedTasks && (
-              <div className="space-y-2">
-                {(showAllCompleted ? allCompletedItems : allCompletedItems.slice(0, 5)).map((item) => (
-                  <div
-                    key={item.id}
-                    className="opacity-70 hover:opacity-100 transition-opacity"
-                  >
-                    {item.subtasks ? (
-                      // Es un ritual (tiene subtasks)
-                      <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-green-200 bg-green-50">
-                        <button
-                          onClick={() => toggleRitual(item.id)}
-                          className="text-green-500"
-                        >
-                          <CheckCircle2 size={18} />
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium text-green-700 line-through">
-                            {item.title}
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      // Es una tarea
-                      <TaskCard
-                        task={item}
-                        onClick={() => handleTaskClick(item)}
-                        onComplete={toggleTaskComplete}
-                        getSubtasks={getSubtasks}
-                        onToggleTaskComplete={toggleComplete}
-                        expandedTasks={expandedTasks}
-                        onToggleExpanded={onToggleExpanded}
-                      />
-                    )}
-                  </div>
-                ))}
-                
-                {allCompletedItems.length > 5 && !showAllCompleted && (
-                  <button
-                    onClick={() => setShowAllCompleted(true)}
-                    className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors border border-gray-200 rounded-lg hover:bg-gray-50"
-                  >
-                    Ver más ({allCompletedItems.length - 5} restantes)
-                  </button>
-                )}
-                
-                {showAllCompleted && allCompletedItems.length > 5 && (
-                  <button
-                    onClick={() => setShowAllCompleted(false)}
-                    className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors border border-gray-200 rounded-lg hover:bg-gray-50"
-                  >
-                    Ver menos
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        {/* RENDERIZADO DINÁMICO DE SECCIONES */}
+        {visibleSections.map((section) => renderSection(section))}
       </div>
 
 
@@ -1349,6 +1196,67 @@ const TaskItApp = () => {
         />
       )}
 
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">⚙️ Configuración</h3>
+              <button onClick={() => setShowSettingsModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              <button 
+                onClick={() => {
+                  setShowSettingsModal(false)
+                  setShowRitualsConfig(true)
+                }}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-lg"
+              >
+                <span className="text-lg">⚡</span>
+                <div>
+                  <div className="font-medium">Daily Rituals</div>
+                  <div className="text-sm text-gray-500">Configurar rutinas diarias</div>
+                </div>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setShowSettingsModal(false)
+                  setShowSectionSettings(true)
+                }}
+                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-lg"
+              >
+                <span className="text-lg">📂</span>
+                <div>
+                  <div className="font-medium">Organización de Secciones</div>
+                  <div className="text-sm text-gray-500">Personalizar orden de secciones</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Section Settings Modal */}
+      {showSectionSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">📂 Organización de Secciones</h3>
+              <button onClick={() => setShowSectionSettings(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4">
+              <PreferencesSection />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Rituals Config Modal */}
       {showRitualsConfig && (
         <RitualsConfig
@@ -1360,7 +1268,7 @@ const TaskItApp = () => {
       {/* Task Detail Modal */}
       {selectedTask && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4"
           onClick={() => setSelectedTask(null)}
         >
           <div 
@@ -1454,12 +1362,19 @@ const TaskItApp = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      toggleTaskComplete(selectedTask.id)
-                      setSelectedTask({...selectedTask, completed: !selectedTask.completed})
+                      console.log('🔄 Modal Toggle Complete clicked for task:', selectedTask.id, 'Current state:', selectedTask.completed)
+                      try {
+                        toggleTaskComplete(selectedTask.id)
+                        setSelectedTask({...selectedTask, completed: !selectedTask.completed})
+                        console.log('✅ Modal Toggle Complete executed successfully')
+                      } catch (error) {
+                        console.error('❌ Error in Modal Toggle Complete:', error)
+                        alert('Error al cambiar el estado de la tarea. Inténtalo de nuevo.')
+                      }
                     }}
                     className={`px-3 py-1 text-sm rounded-lg transition-colors ${
                       selectedTask.completed
-                        ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? 'bg-orange-500 text-white hover:bg-orange-600'
                         : 'bg-green-500 text-white hover:bg-green-600'
                     }`}
                   >
@@ -1504,7 +1419,7 @@ const TaskItApp = () => {
 
       {/* Activity Detail Modal */}
       {selectedActivity && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
           <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold">Detalle de Actividad</h3>

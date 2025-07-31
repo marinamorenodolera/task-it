@@ -3,11 +3,254 @@ import BaseCard from '../ui/BaseCard'
 import BaseButton from '../ui/BaseButton'
 import AttachmentItem from '../attachments/AttachmentItem'
 import { useGestures } from '@/hooks/useGestures'
-import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, MapPin, FileText, User, Trash2 } from 'lucide-react'
+import { useUserPreferences } from '@/hooks/useUserPreferences'
+import { TASK_SECTIONS, getSectionColorClasses } from '../../config/taskSections'
+import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, Inbox, MapPin, FileText, User, Trash2, Flame, Target } from 'lucide-react'
 
-const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onAddAttachment, onDeleteAttachment, onReloadAttachments, subtasksCount = 0, getSubtasks, loadSubtasks, onToggleTaskComplete, addSubtask, deleteSubtask }) => {
+const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onToggleUrgent, onAddAttachment, onDeleteAttachment, onReloadAttachments, subtasksCount = 0, getSubtasks, loadSubtasks, onToggleTaskComplete, addSubtask, deleteSubtask }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editedTask, setEditedTask] = useState(task)
+  
+  // ✅ OBTENER SECCIONES CUSTOM
+  const { visibleSections } = useUserPreferences()
+
+  // Función para renderizar iconos Lucide
+  const renderSectionIcon = (iconName, size = 16) => {
+    const icons = {
+      Star: <Star size={size} />,
+      FileText: <FileText size={size} />,
+      Clock: <Clock size={size} />,
+      Flame: <Flame size={size} />,
+      Trash2: <Trash2 size={size} />
+    }
+    return icons[iconName] || <FileText size={size} />
+  }
+
+  // Función handler unificada para toggles de sección
+  const handleSectionToggle = async (toggleFunction, taskId) => {
+    console.log('🔄 Section toggle:', toggleFunction, 'for task:', taskId)
+    try {
+      if (toggleFunction === 'deleteTask') {
+        if (window.confirm('¿Estás seguro de eliminar esta tarea?')) {
+          await onDelete(taskId)
+          onBack() // Cerrar modal después de eliminar
+        }
+      } else if (toggleFunction === 'toggleBig3') {
+        await onToggleImportant(taskId)
+      } else if (toggleFunction === 'toggleWaitingStatus') {
+        await onToggleWaitingStatus(taskId)
+      } else if (toggleFunction === 'moveToNormal') {
+        // Mover a normal = quitar de Big 3 y quitar de waiting
+        if (task.important) await onToggleImportant(taskId)
+        if (task.status === 'pending') await onToggleWaitingStatus(taskId)
+      } else if (toggleFunction === 'toggleUrgent') {
+        await onToggleUrgent(taskId)
+      }
+      console.log('✅ Section toggle executed successfully')
+    } catch (error) {
+      console.error('❌ Error in section toggle:', error)
+      alert('Error al cambiar la sección. Inténtalo de nuevo.')
+    }
+  }
+
+  // Función para determinar qué sección está activa actualmente - PRECEDENCIA MEJORADA
+  const getCurrentSection = () => {
+    // Si está completada (máxima precedencia)
+    if (task.completed) return 'completed'
+    
+    // ✅ CUSTOM SECTIONS - VERIFICAR section_id PRIMERO
+    if (task.section_id && task.section_id.startsWith('custom_')) {
+      return task.section_id
+    }
+    
+    // PRECEDENCIA DEFAULT: Urgente > Big 3 > En Espera > Normal
+    if (task.priority === 'urgent') {
+      // Buscar sección urgente custom
+      const urgentSection = visibleSections.find(s => s.name === 'Urgente' && s.isCustom)
+      return urgentSection ? urgentSection.id : 'urgent'
+    }
+    
+    if (task.is_big_3_today || task.important) return 'big3'
+    if (task.status === 'pending') return 'waiting'
+    
+    return 'normal'
+  }
+
+  // Función para renderizar iconos con colores
+  const renderTaskSectionIcon = (iconName, sectionId, size = 20) => {
+    const getIconColor = (id) => {
+      switch(id) {
+        case 'big3': return 'text-yellow-500'
+        case 'normal': return 'text-blue-500'
+        case 'waiting': return 'text-orange-500'
+        case 'urgent': return 'text-red-500'
+        case 'completed': return 'text-green-500'
+        default: return 'text-gray-500'
+      }
+    }
+    
+    const iconColor = getIconColor(sectionId)
+    
+    const icons = {
+      Star: <Star size={size} className={iconColor} />,
+      FileText: <FileText size={size} className={iconColor} />,
+      Clock: <Clock size={size} className={iconColor} />,
+      Flame: <Flame size={size} className={iconColor} />,
+      CheckCircle: <CheckCircle size={size} className={iconColor} />
+    }
+    return icons[iconName] || <FileText size={size} className={iconColor} />
+  }
+
+  // ✅ SECCIONES DINÁMICAS: DEFAULT + CUSTOM
+  const SECTION_OPTIONS = [
+    {
+      id: 'big3',
+      name: 'Big 3',
+      icon: 'Star',
+      description: 'Tareas más importantes del día'
+    },
+    {
+      id: 'normal',
+      name: 'Otras Tareas',
+      icon: 'FileText',
+      description: 'Tareas regulares del día'
+    },
+    {
+      id: 'waiting',
+      name: 'En Espera',
+      icon: 'Clock',
+      description: 'Esperando respuesta externa'
+    },
+    // ✅ AÑADIR SECCIONES CUSTOM
+    ...visibleSections.filter(s => s.isCustom).map(section => ({
+      id: section.id,
+      name: section.name,
+      icon: section.icon,
+      description: 'Sección personalizada'
+    })),
+    {
+      id: 'completed',
+      name: 'Completar',
+      icon: 'CheckCircle',
+      description: 'Marcar como terminada'
+    }
+  ]
+
+  // Función handler para cambios de sección - LÓGICA COORDINADA
+  const handleSectionChange = async (newSectionId) => {
+    const currentSection = getCurrentSection()
+    
+    if (currentSection === newSectionId) {
+      console.log('Ya está en esta sección')
+      return
+    }
+
+    try {
+      // STEP 1: Limpiar TODOS los flags de sección actual
+      if (currentSection.startsWith('custom_')) {
+        // ✅ LIMPIAR CUSTOM SECTION
+        await onUpdate(task.id, { section_id: null })
+      } else {
+        switch(currentSection) {
+          case 'big3':
+            if (task.important || task.is_big_3_today) {
+              await onToggleImportant(task.id)
+            }
+            break
+          case 'waiting':
+            if (task.status === 'pending') {
+              await onToggleWaitingStatus(task.id)
+            }
+            break
+          case 'urgent':
+            if (task.priority === 'urgent' && onToggleUrgent) {
+              await onToggleUrgent(task.id)
+            }
+            break
+        }
+      }
+
+      // STEP 2: Aplicar la nueva sección
+      if (newSectionId.startsWith('custom_')) {
+        // ✅ ASIGNAR A CUSTOM SECTION
+        await onUpdate(task.id, { section_id: newSectionId })
+      } else {
+        switch(newSectionId) {
+          case 'completed':
+            await onToggleComplete(task.id)
+            onBack() // Cerrar modal después de completar
+            break
+            
+          case 'big3':
+            if (!task.important && !task.is_big_3_today) {
+              await onToggleImportant(task.id)
+            }
+            break
+            
+          case 'waiting':
+            if (task.status !== 'pending') {
+              await onToggleWaitingStatus(task.id)
+            }
+            break
+            
+          case 'urgent':
+            if (task.priority !== 'urgent' && onToggleUrgent) {
+              await onToggleUrgent(task.id)
+            }
+            break
+            
+          case 'normal':
+            // Ya limpiado en STEP 1, no hacer nada más
+            break
+        }
+      }
+      
+      // Forzar re-render para mostrar cambio
+      setEditedTask(prev => ({ ...prev, updated_at: new Date().toISOString() }))
+      
+    } catch (error) {
+      console.error('Error changing section:', error)
+      alert('Error al cambiar la sección: ' + error.message)
+    }
+  }
+
+  // Renderizado de secciones estilo Gestionar Tareas
+  const renderSectionSelector = () => {
+    const currentSection = getCurrentSection()
+    
+    return (
+      <div className="p-6 space-y-6">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Target size={16} />
+            Mover tarea a:
+          </h4>
+          <div className="grid grid-cols-3 gap-3">
+            {SECTION_OPTIONS.map(section => {
+              const isActive = currentSection === section.id
+              
+              return (
+                <button
+                  key={section.id}
+                  onClick={() => handleSectionChange(section.id)}
+                  className={`p-3 rounded-xl border-2 transition-all duration-200 text-center min-h-[60px] hover:shadow-md ${
+                    isActive
+                      ? 'bg-blue-50 border-blue-500 text-blue-700'
+                      : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    {renderTaskSectionIcon(section.icon, section.id)}
+                    <span className="text-xs font-medium">{section.name}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )
+  }
   const [showAttachmentPanel, setShowAttachmentPanel] = useState(false)
   const [selectedAttachmentType, setSelectedAttachmentType] = useState(null)
   const [attachmentData, setAttachmentData] = useState({})
@@ -27,6 +270,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   const [dragStart, setDragStart] = useState(null)
   const [dragOffset, setDragOffset] = useState(0)
   const [showSwipeHint, setShowSwipeHint] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
   
   const handleMouseDown = (e) => {
     setIsDragging(true)
@@ -93,12 +337,15 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
   // Cargar subtareas cuando se monta el componente
   useEffect(() => {
-    if (task.id && loadSubtasks) {
+    if (task?.id && task.id !== 'undefined' && typeof task.id === 'string' && loadSubtasks) {
       loadSubtasks(task.id).then(() => {
         setSubtasksLoaded(true)
+      }).catch(err => {
+        console.error('Error loading subtasks in TaskDetailScreen:', err)
+        setSubtasksLoaded(true) // Still mark as loaded to avoid infinite loading
       })
     }
-  }, [task.id, loadSubtasks])
+  }, [task?.id, loadSubtasks])
 
   // Scroll to top SOLO al entrar a task detail (no al volver)
   useEffect(() => {
@@ -166,7 +413,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
       setNewSubtaskTitle('')
       setShowAddSubtask(false)
       // Recargar subtareas para mostrar la nueva
-      if (loadSubtasks) {
+      if (loadSubtasks && task?.id && task.id !== 'undefined' && typeof task.id === 'string') {
         await loadSubtasks(task.id)
       }
     } else {
@@ -598,6 +845,63 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             </div>
           </div>
         )
+        
+      case 'deadline':
+        return (
+          <div className="space-y-3 bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 text-orange-700 font-medium">
+              <span className="text-lg">📅</span>
+              <span>Añadir Fecha límite</span>
+            </div>
+            <input
+              type="date"
+              value={attachmentData.deadline || ''}
+              onChange={(e) => setAttachmentData({...attachmentData, deadline: e.target.value})}
+              className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <input
+              type="text"
+              placeholder="Descripción (opcional)"
+              value={attachmentData.deadlineDescription || ''}
+              onChange={(e) => setAttachmentData({...attachmentData, deadlineDescription: e.target.value})}
+              className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <div className="flex gap-2">
+              <BaseButton
+                onClick={() => {
+                  const date = new Date(attachmentData.deadline)
+                  const formattedDate = date.toLocaleDateString('es-ES', { 
+                    day: 'numeric', 
+                    month: 'long', 
+                    year: 'numeric' 
+                  })
+                  handleAddAttachment({
+                    type: 'deadline',
+                    title: `📅 ${formattedDate}${attachmentData.deadlineDescription ? ' - ' + attachmentData.deadlineDescription : ''}`,
+                    content: formattedDate,
+                    metadata: {
+                      date: attachmentData.deadline,
+                      description: attachmentData.deadlineDescription
+                    }
+                  })
+                }}
+                disabled={!attachmentData.deadline}
+                className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                Añadir Fecha
+              </BaseButton>
+              <BaseButton 
+                variant="ghost" 
+                onClick={() => {
+                  setSelectedAttachmentType(null)
+                  setAttachmentData({})
+                }}
+              >
+                Cancelar
+              </BaseButton>
+            </div>
+          </div>
+        )
 
       default:
         return null
@@ -685,29 +989,32 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         {/* Título Limpio de la Tarea */}
         <div className="mb-6">
           {isEditing ? (
-            <input
-              type="text"
-              value={editedTask.text || editedTask.title || ''}
-              onChange={(e) => setEditedTask({...editedTask, text: e.target.value, title: e.target.value})}
-              className="w-full text-2xl font-semibold bg-transparent border-b-2 border-blue-200 focus:border-blue-500 outline-none pb-2 text-gray-900"
-              placeholder="Título de la tarea..."
-            />
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={editedTask.text || editedTask.title || ''}
+                onChange={(e) => setEditedTask({...editedTask, text: e.target.value, title: e.target.value})}
+                className="w-full text-2xl font-semibold bg-transparent border-b-2 border-blue-200 focus:border-blue-500 outline-none pb-2 text-gray-900"
+                placeholder="Título de la tarea..."
+              />
+              <textarea
+                value={editedTask.description || editedTask.notes || ''}
+                onChange={(e) => setEditedTask({...editedTask, description: e.target.value, notes: e.target.value})}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px] resize-y text-base"
+                placeholder="Añade una descripción..."
+              />
+            </div>
           ) : (
-            <h1 className="text-2xl font-semibold text-gray-900 mb-4">
-              {task.title || task.text || 'Sin título'}
-            </h1>
-          )}
-          
-          {!isEditing && task.description && task.description.trim() !== '' && (
-            <p className="text-gray-600 text-base leading-relaxed mb-2">
-              {task.description}
-            </p>
-          )}
-          
-          {!isEditing && task.notes && task.notes !== task.description && task.notes.trim() !== '' && (
-            <p className="text-gray-600 text-base leading-relaxed mb-2">
-              {task.notes}
-            </p>
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 mb-4">
+                {task.title || task.text || 'Sin título'}
+              </h1>
+              {(task.description || task.notes) && (task.description || task.notes).trim() !== '' && (
+                <p className="text-gray-600 text-base leading-relaxed mb-2 whitespace-pre-wrap break-words">
+                  {task.description || task.notes}
+                </p>
+              )}
+            </div>
           )}
           
           {/* Información adicional compacta */}
@@ -735,97 +1042,15 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
           )}
         </div>
 
-        {/* Action Buttons Modernizados */}
-        <div className="flex gap-3 mb-6">
-          <button
-            onClick={() => onToggleComplete(task.id)}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl transition-all duration-200 font-medium ${
-              task.completed
-                ? 'bg-gray-100 text-gray-500 border border-gray-200'
-                : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
-            }`}
-          >
-            {task.completed ? <CheckCircle size={20} /> : <Circle size={20} />}
-            <span className="text-sm">
-              {task.completed ? 'Completada' : 'Completar'}
-            </span>
-          </button>
-          
-          {task.important ? (
-            <button
-              onClick={() => onToggleImportant(task.id)}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-all duration-200 font-medium border border-yellow-200"
-            >
-              <StarOff size={20} />
-              <span className="text-sm">Quitar de Big 3</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => onToggleImportant(task.id)}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl bg-yellow-500 text-white hover:bg-yellow-600 transition-all duration-200 font-medium shadow-sm"
-            >
-              <Star size={20} />
-              <span className="text-sm">Big 3</span>
-            </button>
-          )}
-
-          {/* Botón En Espera */}
-          <button
-            onClick={() => {
-              console.log('BOTON EN ESPERA CLICKEADO');
-              console.log('Task object:', task);
-              console.log('Task.status:', task.status);
-              console.log('onToggleWaitingStatus exists:', !!onToggleWaitingStatus);
-              
-              if (onToggleWaitingStatus) {
-                console.log('Ejecutando onToggleWaitingStatus...');
-                onToggleWaitingStatus(task.id);
-              } else {
-                console.log('onToggleWaitingStatus es undefined');
-              }
-            }}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 min-h-[50px] rounded-xl transition-all duration-200 font-medium ${
-              task.status === 'pending'
-                ? 'bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-200'
-                : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200'
-            }`}
-          >
-            <span className="text-lg">
-              {task.status === 'pending' ? '✅' : '⏳'}
-            </span>
-            <span className="text-sm">
-              {task.status === 'pending' ? 'Activar' : 'En Espera'}
-            </span>
-          </button>
+        {/* Section Selector - Estilo Gestionar Tareas */}
+        <div className="mb-6">
+          {renderSectionSelector()}
         </div>
+        
 
-        {/* Task Content Card */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-6 space-y-6">
-
-            {/* Task Description - Mejorado */}
-            {(task.notes || isEditing) && (
-              <div>
-                {isEditing ? (
-                  <textarea
-                    value={editedTask.notes || ''}
-                    onChange={(e) => setEditedTask({...editedTask, notes: e.target.value})}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px] resize-none text-base"
-                    placeholder="Añade una descripción..."
-                  />
-                ) : task.notes && (
-                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
-                    <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
-                      <FileText size={16} />
-                      Descripción
-                    </h3>
-                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{task.notes}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Metadata Cards */}
+        {/* Metadata Cards */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-4">
+          <div className="p-6">
             <div className="grid grid-cols-2 gap-3">
               {deadline && (
                 <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
@@ -884,7 +1109,6 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               </p>
             </div>
           </div>
-
         </div>
 
         {/* Attachments Section */}

@@ -60,12 +60,16 @@ export const useTasks = () => {
             completed: task.completed,
             important: task.is_big_3_today, // Map Big 3 to important
             status: task.status || 'inbox', // Map status with default
+            priority: task.priority || 'normal', // Map priority with default
             
             // 🆕 CAMPOS DE SUBTAREAS VERIFICADOS EN SUPABASE:
             parent_task_id: task.parent_task_id,
             subtask_order: task.subtask_order || 0,
             section_order: task.section_order || 0,
             is_expanded: task.is_expanded || false,
+            
+            // ✅ NUEVO CAMPO PARA SECCIONES CUSTOM:
+            section_id: task.section_id || 'inbox',
             
             addedAt: new Date(task.created_at),
             deadline: task.deadline ? new Date(task.deadline) : null,
@@ -81,9 +85,9 @@ export const useTasks = () => {
       setTasks(mappedTasks)
       setError(null)
       
-      // Cargar subtareas para todas las tareas principales
-      const subtasksPromises = mappedTasks.map(task => loadSubtasks(task.id))
-      await Promise.all(subtasksPromises)
+      // Cargar subtareas para todas las tareas principales - temporalmente deshabilitado por error
+      // const subtasksPromises = mappedTasks.map(task => loadSubtasks(task.id))
+      // await Promise.all(subtasksPromises)
       
       // Log successful load only once
       if (process.env.NODE_ENV === 'development' && mappedTasks.length > 0) {
@@ -116,12 +120,16 @@ export const useTasks = () => {
         link: taskData.link || null,
         is_big_3_today: taskData.important || false,
         completed: false,
+        priority: taskData.priority || 'normal',
         
         // 🆕 CAMPOS DE SUBTAREAS:
         parent_task_id: taskData.parent_task_id || null,
         subtask_order: taskData.subtask_order || 0,
         section_order: taskData.section_order || 0,
-        is_expanded: taskData.is_expanded || false
+        is_expanded: taskData.is_expanded || false,
+        
+        // ✅ NUEVO CAMPO PARA SECCIONES CUSTOM:
+        section_id: taskData.section_id || 'inbox'
       }
       
 
@@ -146,6 +154,7 @@ export const useTasks = () => {
         notes: data.description,
         completed: data.completed,
         important: data.is_big_3_today,
+        priority: data.priority || 'normal',
         addedAt: new Date(data.created_at),
         deadline: data.deadline ? new Date(data.deadline) : null,
         amount: data.amount,
@@ -158,7 +167,10 @@ export const useTasks = () => {
         parent_task_id: data.parent_task_id,
         subtask_order: data.subtask_order || 0,
         section_order: data.section_order || 0,
-        is_expanded: data.is_expanded || false
+        is_expanded: data.is_expanded || false,
+        
+        // ✅ NUEVO CAMPO PARA SECCIONES CUSTOM:
+        section_id: data.section_id || 'inbox'
       }
 
       setTasks(prev => [newTask, ...prev])
@@ -185,6 +197,9 @@ export const useTasks = () => {
       if (updates.amount !== undefined) dbUpdates.amount = updates.amount
       if (updates.link !== undefined) dbUpdates.link = updates.link
       if (updates.status !== undefined) dbUpdates.status = updates.status
+      if (updates.priority !== undefined) dbUpdates.priority = updates.priority
+      if (updates.section_id !== undefined) dbUpdates.section_id = updates.section_id
+
 
       const { data, error } = await supabase
         .from('tasks')
@@ -422,39 +437,46 @@ export const useTasks = () => {
   }
 
   // Versión async para cargar subtareas desde BD
-  const loadSubtasks = async (parentTaskId) => {
-    if (!user?.id || !parentTaskId) return []
-    
+  const loadSubtasks = async (taskId) => {
+    if (!taskId) {
+      console.log('loadSubtasks: No taskId provided')
+      return []
+    }
+
+    // Validar que taskId es válido
+    if (taskId === 'undefined' || typeof taskId !== 'string') {
+      console.warn('loadSubtasks: Invalid taskId provided:', taskId)
+      return []
+    }
+
+    if (!user?.id) {
+      return []
+    }
+
     try {
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .eq('user_id', user.id)
-        .eq('parent_task_id', parentTaskId)
-        .order('subtask_order', { ascending: true })
+        .eq('parent_task_id', taskId)
+        .order('created_at', { ascending: true })
 
-      if (error) throw error
-
-      // Mapear igual que loadTasks
-      const subtasks = data.map(task => ({
-        id: task.id,
-        title: task.title,
-        completed: task.completed,
-        parent_task_id: task.parent_task_id,
-        subtask_order: task.subtask_order,
-        created_at: task.created_at,
-        updated_at: task.updated_at
-      }))
-
-      // Actualizar cache
-      setSubtasksCache(prev => ({
-        ...prev,
-        [parentTaskId]: subtasks
-      }))
-
-      return subtasks
+      if (error) {
+        console.error('Supabase error loading subtasks:', error.message || 'Unknown error')
+        return []
+      }
+      
+      // Actualizar cache si hay datos
+      if (data && data.length > 0) {
+        setSubtasksCache(prev => ({
+          ...prev,
+          [taskId]: data
+        }))
+      }
+      
+      return data || []
+      
     } catch (err) {
-      console.error('Error loading subtasks:', err)
+      console.error('Unexpected error in loadSubtasks:', err.message || err)
       return []
     }
   }
@@ -486,6 +508,115 @@ export const useTasks = () => {
       return { error: null }
     } catch (err) {
       console.error('Error updating task order:', err)
+      return { error: err.message }
+    }
+  }
+
+  // 🆕 BULK OPERATIONS
+  const bulkUpdateStatus = async (taskIds, newStatus) => {
+    if (!user?.id) return { error: 'Usuario no autenticado' }
+    if (!taskIds || taskIds.length === 0) return { error: 'No hay tareas seleccionadas' }
+
+    // 1. Optimistic update
+    const originalTasks = [...tasks]
+    setTasks(prev => prev.map(task => 
+      taskIds.includes(task.id) 
+        ? { ...task, status: newStatus }
+        : task
+    ))
+
+    try {
+      // 2. Batch update to Supabase
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .in('id', taskIds)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+      return { error: null }
+    } catch (err) {
+      // Rollback on error
+      setTasks(originalTasks)
+      console.error('Error bulk updating status:', err)
+      return { error: err.message }
+    }
+  }
+
+  const bulkToggleImportant = async (taskIds, isImportant) => {
+    if (!user?.id) return { error: 'Usuario no autenticado' }
+    if (!taskIds || taskIds.length === 0) return { error: 'No hay tareas seleccionadas' }
+
+    // Check Big 3 limit if setting to important
+    if (isImportant) {
+      const currentBig3Count = tasks.filter(t => t.important && !t.completed).length
+      const newBig3Count = taskIds.filter(id => {
+        const task = tasks.find(t => t.id === id)
+        return task && !task.important && !task.completed
+      }).length
+      
+      if (currentBig3Count + newBig3Count > 3) {
+        return { error: `Solo puedes tener 3 tareas Big 3. Actualmente tienes ${currentBig3Count}.` }
+      }
+    }
+
+    // 1. Optimistic update
+    const originalTasks = [...tasks]
+    setTasks(prev => prev.map(task => 
+      taskIds.includes(task.id) 
+        ? { ...task, important: isImportant }
+        : task
+    ))
+
+    try {
+      // 2. Batch update to Supabase
+      const { error } = await supabase
+        .from('tasks')
+        .update({ is_big_3_today: isImportant })
+        .in('id', taskIds)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+      return { error: null }
+    } catch (err) {
+      // Rollback on error
+      setTasks(originalTasks)
+      console.error('Error bulk updating important:', err)
+      return { error: err.message }
+    }
+  }
+
+  const bulkDelete = async (taskIds) => {
+    if (!user?.id) return { error: 'Usuario no autenticado' }
+    if (!taskIds || taskIds.length === 0) return { error: 'No hay tareas seleccionadas' }
+
+    // 1. Optimistic update
+    const originalTasks = [...tasks]
+    setTasks(prev => prev.filter(task => !taskIds.includes(task.id)))
+
+    try {
+      // 2. Delete attachments for all tasks first
+      for (const taskId of taskIds) {
+        try {
+          await attachmentService.deleteTaskAttachments(taskId)
+        } catch (err) {
+          console.warn(`Error deleting attachments for task ${taskId}:`, err)
+        }
+      }
+
+      // 3. Batch delete from Supabase
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .in('id', taskIds)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+      return { error: null }
+    } catch (err) {
+      // Rollback on error
+      setTasks(originalTasks)
+      console.error('Error bulk deleting tasks:', err)
       return { error: err.message }
     }
   }
@@ -606,27 +737,67 @@ export const useTasks = () => {
 
   // Reload task attachments
   const reloadTaskAttachments = async (taskId) => {
+    if (!taskId || taskId === 'undefined' || typeof taskId !== 'string') {
+      console.warn('reloadTaskAttachments: Invalid taskId provided:', taskId)
+      return { error: 'Invalid taskId' }
+    }
+
     try {
-      const { data: attachments } = await attachmentService.getTaskAttachments(taskId)
+      const result = await attachmentService.getTaskAttachments(taskId)
+      
+      if (result.error) {
+        console.warn('Error getting attachments for task', taskId, ':', result.error)
+        return { error: result.error }
+      }
+      
+      const attachments = result.data || []
       
       setTasks(prev => prev.map(task => 
         task.id === taskId 
-          ? { ...task, attachments: attachments || [] }
+          ? { ...task, attachments }
           : task
       ))
 
       return { error: null }
     } catch (err) {
-      console.error('Error reloading task attachments:', err)
+      console.error('Unexpected error reloading task attachments:', err)
       return { error: err.message }
     }
   }
 
-  // Computed values
-  const importantTasks = tasks.filter(task => task.important && !task.completed)
-  const routineTasks = tasks.filter(task => !task.important && !task.completed && task.status !== 'pending')
-  const waitingTasks = tasks.filter(task => task.status === 'pending' && !task.completed)
+  // Toggle urgent priority
+  const toggleUrgent = async (taskId) => {
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return { error: 'Tarea no encontrada' }
+
+    const newPriority = task.priority === 'urgent' ? 'normal' : 'urgent'
+    
+    return await updateTask(taskId, { priority: newPriority })
+  }
+
+  // Computed values - FILTROS CON PRECEDENCIA
   const completedTasks = tasks.filter(task => task.completed)
+  
+  // PRECEDENCIA: Urgente > Big 3 > En Espera > Normal
+  const urgentTasks = tasks.filter(task => 
+    task.priority === 'urgent' && !task.completed
+  )
+  
+  
+  const importantTasks = tasks.filter(task => 
+    task.important && !task.completed && task.priority !== 'urgent'
+  )
+  
+  const waitingTasks = tasks.filter(task => 
+    task.status === 'pending' && !task.completed && 
+    task.priority !== 'urgent' && !task.important
+  )
+  
+  const routineTasks = tasks.filter(task => 
+    !task.important && !task.completed && 
+    task.status !== 'pending' && task.priority !== 'urgent'
+  )
+  
   const big3Count = importantTasks.length
 
   return {
@@ -637,6 +808,7 @@ export const useTasks = () => {
     importantTasks,
     routineTasks,
     waitingTasks,
+    urgentTasks,
     completedTasks,
     big3Count,
     addTask,
@@ -644,6 +816,7 @@ export const useTasks = () => {
     toggleComplete,
     toggleBig3,
     toggleWaitingStatus,
+    toggleUrgent,
     deleteTask,
     setBig3Tasks,
     loadTasks,
@@ -659,6 +832,11 @@ export const useTasks = () => {
     deleteSubtask,
     
     // 🆕 FUNCIÓN DE DRAG AND DROP
-    updateTaskOrder
+    updateTaskOrder,
+    
+    // 🆕 BULK OPERATIONS
+    bulkUpdateStatus,
+    bulkToggleImportant,
+    bulkDelete
   }
 }

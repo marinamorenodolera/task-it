@@ -436,3 +436,23 @@ body {
   will-change: transform;
   backface-visibility: hidden;
 }
+
+/* ✅ DESACTIVAR SELECCIÓN DE TEXTO EN COMPONENTES DRAGGABLES */
+.drag-handle,
+.sortable-item,
+[data-rbd-draggable-id],
+[data-sortable-id] {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ✅ MEJORAR EXPERIENCIA TOUCH PARA DRAG AND DROP */
+.drag-container {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

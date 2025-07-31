@@ -1,23 +1,62 @@
 import React, { useState } from 'react'
-import { X, Star, Target, CheckCircle } from 'lucide-react'
+import { X, Star, Target, CheckCircle, FileText, Clock, Flame, Trash2 } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
 import { formatDeadline } from '@/utils/dateHelpers'
+import { TASK_SECTIONS, getSectionColorClasses } from '../../config/taskSections'
 
 const TaskSelector = ({ isOpen, onClose, tasks = [], currentBig3 = [] }) => {
-  const { setBig3Tasks } = useTasks()
+  const { setBig3Tasks, bulkUpdateStatus, bulkToggleImportant, bulkDelete, toggleUrgent } = useTasks()
   const [selectedTasks, setSelectedTasks] = useState(currentBig3.map(t => t.id))
   const [loading, setLoading] = useState(false)
+  const [activeSection, setActiveSection] = useState('big3')
 
   if (!isOpen) return null
+
+  // Función para renderizar iconos Lucide con colores según sección
+  const renderSectionIcon = (iconName, size = 18, sectionColor) => {
+    const getIconColor = (color) => {
+      switch(color) {
+        case 'yellow': return 'text-yellow-500'
+        case 'blue': return 'text-blue-500'
+        case 'gray': return 'text-orange-500'
+        case 'red': return 'text-red-500'
+        default: return 'text-gray-500'
+      }
+    }
+    
+    const iconColor = sectionColor ? getIconColor(sectionColor) : 'text-gray-500'
+    
+    const icons = {
+      Star: <Star size={size} className={iconColor} />,
+      FileText: <FileText size={size} className={iconColor} />,
+      Clock: <Clock size={size} className={iconColor} />,
+      Flame: <Flame size={size} className={iconColor} />,
+      Trash2: <Trash2 size={size} className={iconColor} />
+    }
+    return icons[iconName] || <FileText size={size} className={iconColor} />
+  }
+
+  // Función para obtener clases simples para cada sección
+  const getSelectorButtonClasses = (section, isActive) => {
+    const baseClasses = "p-4 rounded-xl border-2 transition-all duration-200 text-left min-h-[60px] hover:shadow-md"
+    
+    return `${baseClasses} ${isActive 
+      ? 'bg-blue-50 border-blue-500 text-blue-700'
+      : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+    }`
+  }
 
   const toggleTaskSelection = (taskId) => {
     setSelectedTasks(prev => {
       if (prev.includes(taskId)) {
         return prev.filter(id => id !== taskId)
-      } else if (prev.length < 3) {
+      } else {
+        // Solo Big 3 tiene límite de 3 tareas
+        if (activeSection === 'big3' && prev.length >= 3) {
+          return prev
+        }
         return [...prev, taskId]
       }
-      return prev
     })
   }
 
@@ -40,6 +79,147 @@ const TaskSelector = ({ isOpen, onClose, tasks = [], currentBig3 = [] }) => {
     }
   }
 
+  const handleMoveToWaiting = async () => {
+    if (selectedTasks.length === 0) return
+    setLoading(true)
+    
+    try {
+      const result = await bulkUpdateStatus(selectedTasks, 'pending')
+      
+      if (result.error) {
+        alert('Error al mover a En Espera: ' + result.error)
+      } else {
+        onClose()
+      }
+    } catch (error) {
+      console.error('Error moving to waiting:', error)
+      alert('Error al mover las tareas')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleMoveToNormal = async () => {
+    if (selectedTasks.length === 0) return
+    setLoading(true)
+    
+    try {
+      // Move to normal: important=false, status='inbox'
+      const statusResult = await bulkUpdateStatus(selectedTasks, 'inbox')
+      if (statusResult.error) throw new Error(statusResult.error)
+      
+      const importantResult = await bulkToggleImportant(selectedTasks, false)
+      if (importantResult.error) throw new Error(importantResult.error)
+      
+      onClose()
+    } catch (error) {
+      console.error('Error moving to normal:', error)
+      alert('Error al mover las tareas: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleToggleUrgent = async () => {
+    if (selectedTasks.length === 0) return
+    setLoading(true)
+    
+    try {
+      // Toggle urgent for each selected task
+      for (const taskId of selectedTasks) {
+        const result = await toggleUrgent(taskId)
+        if (result.error) {
+          console.error('Error toggling urgent for task', taskId, ':', result.error)
+        }
+      }
+      onClose()
+    } catch (error) {
+      console.error('Error toggling urgent:', error)
+      alert('Error al cambiar urgencia: ' + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedTasks.length === 0) return
+    
+    const confirmDelete = confirm(
+      `¿Estás seguro de eliminar ${selectedTasks.length} tarea${selectedTasks.length > 1 ? 's' : ''}? Esta acción no se puede deshacer.`
+    )
+    
+    if (!confirmDelete) return
+    
+    setLoading(true)
+    
+    try {
+      const result = await bulkDelete(selectedTasks)
+      
+      if (result.error) {
+        alert('Error al eliminar: ' + result.error)
+      } else {
+        onClose()
+      }
+    } catch (error) {
+      console.error('Error deleting tasks:', error)
+      alert('Error al eliminar las tareas')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Función unificada para manejar acciones según sección activa
+  const handleAction = async () => {
+    if (selectedTasks.length === 0) return
+
+    switch (activeSection) {
+      case 'big3':
+        return await handleSave()
+      case 'waiting':
+        return await handleMoveToWaiting()
+      case 'normal':
+        return await handleMoveToNormal()
+      case 'urgent':
+        return await handleToggleUrgent()
+      case 'delete':
+        return await handleDeleteSelected()
+      default:
+        return
+    }
+  }
+
+  // Configuración de botones dinámica
+  const getActionButtonConfig = () => {
+    const configs = {
+      big3: { 
+        text: `Guardar Big 3 (${selectedTasks.length}/3)`, 
+        color: 'bg-blue-600 hover:bg-blue-700', 
+        disabled: selectedTasks.length === 0 || selectedTasks.length > 3 
+      },
+      waiting: { 
+        text: `Mover a En Espera (${selectedTasks.length})`, 
+        color: 'bg-amber-600 hover:bg-amber-700', 
+        disabled: selectedTasks.length === 0 
+      },
+      normal: { 
+        text: `Mover a Normal (${selectedTasks.length})`, 
+        color: 'bg-gray-600 hover:bg-gray-700', 
+        disabled: selectedTasks.length === 0 
+      },
+      urgent: { 
+        text: `Marcar Urgente (${selectedTasks.length})`, 
+        color: 'bg-red-500 hover:bg-red-600', 
+        disabled: selectedTasks.length === 0 
+      },
+      delete: { 
+        text: `Eliminar Tareas (${selectedTasks.length})`, 
+        color: 'bg-red-600 hover:bg-red-700', 
+        disabled: selectedTasks.length === 0 
+      }
+    }
+    return configs[activeSection]
+  }
+
   // Combine routine tasks and current Big 3 for selection
   const availableTasks = [
     ...tasks,
@@ -50,13 +230,13 @@ const TaskSelector = ({ isOpen, onClose, tasks = [], currentBig3 = [] }) => {
   )
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
       <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Target className="w-5 h-5 text-blue-600" />
-            <h3 className="text-lg font-semibold">Seleccionar Big 3</h3>
+            <h3 className="text-lg font-semibold">Gestionar Tareas</h3>
           </div>
           <button
             onClick={onClose}
@@ -66,19 +246,41 @@ const TaskSelector = ({ isOpen, onClose, tasks = [], currentBig3 = [] }) => {
           </button>
         </div>
 
-        {/* Counter */}
-        <div className="p-4 bg-blue-50 border-b border-blue-200">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-blue-800">
-              Selecciona tus 3 tareas más importantes para hoy
-            </span>
-            <span className={`text-sm font-medium px-2 py-1 rounded ${
-              selectedTasks.length <= 3 
-                ? 'bg-green-100 text-green-800' 
-                : 'bg-red-100 text-red-800'
-            }`}>
-              {selectedTasks.length}/3
-            </span>
+        {/* Section Selector */}
+        <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Elige sección y selecciona tareas para mover:</h4>
+          <div className="grid grid-cols-2 gap-3">
+            {TASK_SECTIONS
+              .filter(section => section.showInSelector)
+              .sort((a, b) => a.priority - b.priority)
+              .map(section => {
+                const sectionTasks = tasks.filter(task => {
+                  if (section.filterFunction) {
+                    return section.filterFunction([task]).length > 0
+                  }
+                  return false
+                })
+                const taskCount = sectionTasks.length
+                
+                return (
+                  <button 
+                    key={section.id}
+                    onClick={() => {
+                      setActiveSection(section.id)
+                      // Si es Big 3 y hay más de 3 tareas seleccionadas, limpiar selección
+                      if (section.id === 'big3' && selectedTasks.length > 3) {
+                        setSelectedTasks([])
+                      }
+                    }}
+                    className={getSelectorButtonClasses(section, activeSection === section.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {renderSectionIcon(section.icon, 20, section.color)}
+                      <span className="font-medium">{section.name}</span>
+                    </div>
+                  </button>
+                )
+              })}
           </div>
         </div>
         
@@ -164,28 +366,29 @@ const TaskSelector = ({ isOpen, onClose, tasks = [], currentBig3 = [] }) => {
               Cancelar
             </button>
             <button
-              onClick={handleSave}
-              disabled={loading || availableTasks.length === 0}
-              className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              onClick={handleAction}
+              disabled={loading || availableTasks.length === 0 || getActionButtonConfig().disabled}
+              className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed ${getActionButtonConfig().color}`}
             >
               {loading ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Guardando...
+                  Procesando...
                 </div>
               ) : (
-                'Guardar Big 3'
+                getActionButtonConfig().text
               )}
             </button>
           </div>
           
           {/* Tips */}
           <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-            <h4 className="text-xs font-medium text-gray-700 mb-1">💡 Consejos para Big 3:</h4>
+            <h4 className="text-xs font-medium text-gray-700 mb-1">💡 Gestión de tareas:</h4>
             <ul className="text-xs text-gray-600 space-y-1">
-              <li>• Elige tareas que marquen la diferencia en tu día</li>
-              <li>• Prioriza lo importante sobre lo urgente</li>
-              <li>• Máximo 3 tareas para mantener el foco</li>
+              <li>• <strong>Big 3:</strong> Máximo 3 tareas importantes del día</li>
+              <li>• <strong>En Espera:</strong> Tareas esperando respuesta externa</li>
+              <li>• <strong>Otras:</strong> Tareas normales sin prioridad especial</li>
+              <li>• Selecciona varias tareas para moverlas en lote</li>
             </ul>
           </div>
         </div>

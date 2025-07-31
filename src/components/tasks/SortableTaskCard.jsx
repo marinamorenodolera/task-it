@@ -20,7 +20,14 @@ const SortableTaskCard = (props) => {
   }
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className={`
+        sortable-item drag-handle
+        ${isDragging ? 'shadow-2xl' : ''}
+      `}
+    >
       <TaskCard
         {...props}
         dragAttributes={attributes}

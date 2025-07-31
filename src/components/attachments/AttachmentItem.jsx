@@ -49,6 +49,39 @@ const AttachmentItem = ({ attachment, onDelete }) => {
   const color = getAttachmentColor(attachmentType)
   const icon = getAttachmentIcon(attachmentType)
 
+  // FORMATO EXPANDIDO PARA NOTAS
+  if (attachmentType === 'note') {
+    return (
+      <>
+        <div className={`bg-${color}-50 border border-${color}-100 rounded-xl p-5`}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={`text-sm font-semibold text-${color}-900 flex items-center gap-2`}>
+              <span className="text-lg">{icon}</span>
+              Nota adjunta
+            </h3>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                const confirmDelete = window.confirm('¿Eliminar esta nota?')
+                if (confirmDelete && onDelete) {
+                  onDelete()
+                }
+              }}
+              className="text-red-500 hover:text-red-700 p-1 transition-colors"
+              title="Eliminar nota"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+          <div className="text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+            {attachment.content || attachment.title}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // FORMATO COMPACTO PARA OTROS TIPOS
   return (
     <>
       <div className={`flex items-center gap-3 p-3 bg-${color}-50 border border-${color}-200 rounded-lg min-h-[60px]`}>
@@ -74,11 +107,11 @@ const AttachmentItem = ({ attachment, onDelete }) => {
           {attachment.type && !attachment.file_size ? (
             <>
               <p className="text-xs text-gray-500 uppercase tracking-wider">
-                {attachment.type === 'note' ? 'NOTA' : 
-                 attachment.type === 'link' ? 'ENLACE' :
+                {attachment.type === 'link' ? 'ENLACE' :
                  attachment.type === 'contact' ? 'CONTACTO' :
                  attachment.type === 'amount' ? 'IMPORTE' :
-                 attachment.type === 'location' ? 'UBICACIÓN' : attachment.type}:
+                 attachment.type === 'location' ? 'UBICACIÓN' :
+                 attachment.type === 'deadline' ? 'FECHA' : attachment.type}:
               </p>
               <div className={`text-sm font-medium text-${color}-800 line-clamp-2`}>
                 {attachment.type === 'deadline' && attachment.content ? 

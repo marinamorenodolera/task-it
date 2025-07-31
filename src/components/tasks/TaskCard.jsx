@@ -26,6 +26,8 @@ const TaskCard = ({
   const subtasks = getSubtasks ? getSubtasks(task.id) : []
   const hasSubtasks = subtasks.length > 0
   const isExpanded = expandedTasks.includes(task.id)
+  
+  
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useGestures()
   const hasAdditionalContent = () => {
     return (task.attachments && task.attachments.length > 0) || 
@@ -82,15 +84,11 @@ const TaskCard = ({
   return (
     <div>
       <div
-        className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all touch-manipulation ${
+        className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all touch-manipulation select-none user-select-none ${
           task.justCompleted 
             ? 'opacity-90' 
             : 'opacity-100'
-        } ${
-          task.completed 
-            ? 'border-green-200 bg-green-50' 
-            : 'border-gray-200 hover:border-purple-200'
-        } ${
+        } border-gray-200 hover:border-purple-200 ${
           isDragging 
             ? 'shadow-lg border-blue-300 cursor-grabbing' 
             : isBeingReordered 
@@ -105,8 +103,14 @@ const TaskCard = ({
           onPointerDown={(e) => {
             e.stopPropagation()
             e.preventDefault()
+            console.log('🔄 TaskCard Toggle Complete clicked for task:', task.id, 'Current state:', task.completed)
             setCheckboxPressed(true)
-            onComplete(task.id)
+            try {
+              onComplete(task.id)
+              console.log('✅ TaskCard Toggle Complete executed successfully')
+            } catch (error) {
+              console.error('❌ Error in TaskCard Toggle Complete:', error)
+            }
             setTimeout(() => setCheckboxPressed(false), 100)
           }}
           onClick={(e) => {
@@ -115,6 +119,7 @@ const TaskCard = ({
           }}
           onTouchStart={(e) => {
             e.stopPropagation()
+            console.log('🔄 TaskCard Touch Start for task:', task.id, 'Current state:', task.completed)
             setCheckboxPressed(true)
             setTimeout(() => setCheckboxPressed(false), 100)
           }}
@@ -129,11 +134,7 @@ const TaskCard = ({
         </button>
         
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span className={`text-sm font-medium transition-all duration-300 ${
-            task.completed 
-              ? 'text-green-700 line-through' 
-              : 'text-gray-900'
-          }`}>
+          <span className="text-sm font-medium text-gray-900">
             {task.title}
           </span>
           
@@ -146,6 +147,13 @@ const TaskCard = ({
           {task.deadline && (
             <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded-full flex-shrink-0">
               📅 {task.deadlineDisplay || formatTaskDeadline(task.deadline)}
+            </span>
+          )}
+          
+          {/* Contador de subtareas */}
+          {hasSubtasks && (
+            <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full flex-shrink-0">
+              📋 {subtasks.length}
             </span>
           )}
           
@@ -191,7 +199,6 @@ const TaskCard = ({
         {hasSubtasks && onToggleExpanded && (
           <button
             onClick={(e) => {
-              e.preventDefault()
               e.stopPropagation()
               onToggleExpanded(task.id)
             }}

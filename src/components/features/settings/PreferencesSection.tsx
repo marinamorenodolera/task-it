@@ -51,7 +51,7 @@ export default function PreferencesSection() {
     icon: 'folder',
     filterType: 'manual'
   })
-  const [editingSectionId, setEditingSectionId] = useState(null)
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
 
   // FUNCIÓN renderIcon ACTUALIZADA
   const renderIcon = (iconName: string, size: number = 20, className: string = '') => {

@@ -5,7 +5,7 @@ import {
   MicOff, 
   CheckCircle2,
   Circle,
-  CircleDot,
+  Target,
   Zap,
   Activity,
   MessageSquare,
@@ -19,7 +19,6 @@ import {
   ChevronDown,
   ChevronUp,
   Settings,
-  Target,
   LayoutGrid,
   Trash2,
   // ICONOS PARA SECCIONES:
@@ -121,21 +120,8 @@ const TaskItApp = () => {
   // USER PREFERENCES HOOK
   const { 
     sectionOrder: userSectionOrder, 
-    visibleSections,
-    forceResetWithActivities
+    visibleSections
   } = useUserPreferences()
-  
-  // 🎯 DEBUG ACTIVITIES TEMPORAL
-  console.log('🎯 DEBUG ACTIVITIES:')
-  console.log('- todayActivities:', todayActivities)
-  console.log('- activityStats:', activityStats)
-  console.log('- visibleSections:', visibleSections)
-  console.log('- section activities visible?', visibleSections.some(s => s.id === 'activities'))
-  
-  // 🚨 EXPONER FUNCIÓN DE RESET EN WINDOW PARA DEBUG
-  if (typeof window !== 'undefined') {
-    window.forceResetWithActivities = forceResetWithActivities
-  }
   
 
   // Importar función shared para iconos
@@ -145,7 +131,6 @@ const TaskItApp = () => {
       folder: { icon: Folder, color: 'text-blue-500' },
       flame: { icon: Flame, color: 'text-red-500' },
       zap: { icon: Zap, color: 'text-purple-500' },
-      activity: { icon: Activity, color: 'text-green-500' },
       calendar: { icon: Calendar, color: 'text-green-500' },
       target: { icon: Target, color: 'text-purple-500' },
       lightbulb: { icon: Lightbulb, color: 'text-amber-500' },
@@ -186,9 +171,6 @@ const TaskItApp = () => {
       case 'big3':
         return importantTasks || []
       case 'urgent':
-        if (urgentTasks?.length > 0) {
-          console.log('🔥 URGENT SECTION RENDERING:', urgentTasks.length, 'tasks')
-        }
         return urgentTasks || []
       case 'waiting':  
         return waitingTasks || []
@@ -197,11 +179,9 @@ const TaskItApp = () => {
       case 'completed':
         return completedTasks || []
       default:
-        // ✅ MANEJAR SECCIONES CUSTOM
+        // ✅ MANEJAR SECCIONES CUSTOM (DESHABILITADO - section_id no existe en tabla)
         if (sectionId.startsWith('custom_')) {
-          return tasks.filter(task => 
-            task.section_id === sectionId && !task.completed
-          ) || []
+          return [] // Por ahora retornamos array vacío hasta que se implemente section_id
         }
         return []
     }
@@ -209,8 +189,6 @@ const TaskItApp = () => {
 
   // FUNCIÓN PARA RENDERIZAR UNA SECCIÓN
   const renderSection = (section) => {
-    console.log('🔍 Rendering section:', section.id, section.name, 'visible:', section.visible)
-    
     if (!section.visible) return null
 
     // Caso especial para rituales
@@ -299,184 +277,6 @@ const TaskItApp = () => {
       )
     }
 
-    // Caso especial para actividades
-    if (section.id === 'activities') {
-      console.log('🎯 RENDERING ACTIVITIES SECTION!')
-      console.log('- todayActivities count:', todayActivities?.length || 0)
-      console.log('- activityStats:', activityStats)
-      return (
-        <div key={section.id}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              {renderSectionIcon(section.icon)}
-              {section.name}
-              <span className="text-sm text-gray-500 font-normal">({activityStats.totalTimeToday || 0} min hoy)</span>
-            </h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentView('activity-settings')}
-                className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
-                title="Configurar actividades predeterminadas"
-              >
-                <Settings size={16} />
-              </button>
-              <button
-                onClick={() => setShowActivityForm(!showActivityForm)}
-                className="px-3 py-1 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors"
-              >
-                + Añadir
-              </button>
-            </div>
-          </div>
-
-          {/* Activity Form */}
-          {showActivityForm && (
-            <div className="mb-4 p-4 bg-white rounded-xl border border-gray-200 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tipo de actividad
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={newActivity.type}
-                      onChange={(e) => setNewActivity(prev => ({ ...prev, type: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      placeholder="Ej: Pilates, Correr, Leer..."
-                      list="predefined-activities"
-                    />
-                    <datalist id="predefined-activities">
-                      {predefinedActivities.map((activity) => (
-                        <option 
-                          key={activity.id} 
-                          value={activity.type}
-                          data-duration={activity.duration}
-                        />
-                      ))}
-                    </datalist>
-                  </div>
-                  {predefinedActivities.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {predefinedActivities.slice(0, 4).map((activity) => (
-                        <button
-                          key={activity.id}
-                          type="button"
-                          onClick={() => setNewActivity(prev => ({
-                            ...prev,
-                            type: activity.type,
-                            duration: activity.duration.toString()
-                          }))}
-                          className="px-2 py-1 text-xs rounded-full border transition-colors hover:border-green-500 bg-gray-100 text-gray-700 border-gray-200 hover:bg-green-50"
-                        >
-                          {activity.type} ({activity.duration}min)
-                        </button>
-                      ))}
-                      {predefinedActivities.length > 4 && (
-                        <span className="text-xs text-gray-500 px-2 py-1">
-                          +{predefinedActivities.length - 4} más...
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Duración (minutos)
-                  </label>
-                  <input
-                    type="number"
-                    value={newActivity.duration}
-                    onChange={(e) => setNewActivity(prev => ({ ...prev, duration: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="50"
-                    min="1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Fecha
-                  </label>
-                  <input
-                    type="date"
-                    value={newActivity.date}
-                    onChange={(e) => setNewActivity(prev => ({ ...prev, date: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    max={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowActivityForm(false)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleAddActivity}
-                  disabled={!newActivity.type.trim() || !newActivity.duration}
-                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Añadir Actividad
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Activities List - Diseño original simple */}
-          <div className="space-y-2">
-            {todayActivities.map((activity) => (
-              <div
-                key={activity.id}
-                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                  <div>
-                    <span className="text-sm font-medium text-gray-900">
-                      {activity.type} {activity.duration}min
-                    </span>
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <Calendar size={12} />
-                      <span>
-                        {new Date(activity.created_at).toLocaleDateString('es-ES', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric'
-                        })} - {activity.time ? activity.time.slice(0, 5) : new Date(activity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await deleteActivity(activity.id);
-                    } catch (error) {
-                      console.error('Error eliminando actividad:', error);
-                    }
-                  }}
-                  className="p-1 text-red-400 hover:text-red-600 transition-colors"
-                  title="Eliminar actividad"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-            
-            {todayActivities.length === 0 && (
-              <div className="text-center py-6 text-gray-500">
-                <Zap size={48} className="mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">No hay actividades registradas hoy</p>
-                <p className="text-xs">Cada movimiento cuenta - ¡Empieza ahora!</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )
-    }
-
     // Caso especial para tareas completadas
     if (section.id === 'completed') {
       const allCompletedItems = [
@@ -504,7 +304,6 @@ const TaskItApp = () => {
               {allCompletedItems.map((item) => (
                 <div key={`${item.id}-${item.type || 'task'}`} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all cursor-pointer"
                   onClick={() => {
-                    console.log('🔄 Completed item clicked:', item.id, 'Type:', item.type || 'task')
                     if (item.type === 'task' || !item.type) {
                       toggleTaskComplete(item.id)
                     }
@@ -814,7 +613,6 @@ const TaskItApp = () => {
         // Para rituales, solo los quitamos de la vista (se resetean diariamente automáticamente)
         // No hacemos nada con los rituales completados, se resetean solos a las 6 AM
         
-        console.log(`${completedTasksToDelete.length} tareas eliminadas y ${completedRituals.length} rituales reseteados`)
       } catch (error) {
         console.error('Error al eliminar tareas completadas:', error)
         alert('Hubo un error al eliminar las tareas. Inténtalo de nuevo.')
@@ -926,24 +724,20 @@ const TaskItApp = () => {
   // ✅ DRAG HANDLERS - OPTIMISTAS
   const handleDragStart = (event) => {
     const { active } = event
-    console.log('🚀 DRAG START:', active.id)
     setActiveId(active.id)
     
     // Encontrar la tarea que se está arrastrando
     const task = [...importantTasks, ...waitingTasks, ...routineTasks].find(t => t.id === active.id)
-    console.log('📋 Dragged task:', task)
     setDraggedTask(task)
   }
 
   const handleDragEnd = (event) => {
     const { active, over } = event
-    console.log('🎯 DRAG END EVENT:', { activeId: active.id, overId: over?.id })
     
     setActiveId(null)
     setDraggedTask(null)
 
     if (!over || active.id === over.id) {
-      console.log('❌ DRAG CANCELLED - No over or same position')
       return
     }
 
@@ -962,24 +756,15 @@ const TaskItApp = () => {
       sectionName = 'routine'
     }
     
-    console.log('📍 Section identified:', sectionName)
-    console.log('📋 Section tasks:', sectionTasks.map(t => ({id: t.id, title: t.title})))
-
     const oldIndex = sectionTasks.findIndex(task => task.id === active.id)
     const newIndex = sectionTasks.findIndex(task => task.id === over.id)
-    
-    console.log('📍 Indices:', { oldIndex, newIndex })
 
     if (oldIndex === -1 || newIndex === -1) {
-      console.log('❌ DRAG FAILED - Invalid indices')
       return
     }
 
-    console.log('✅ STARTING REORDER PROCESS...')
-
     // 1. REORDENAMIENTO OPTIMISTA INMEDIATO
     const reorderedTasks = arrayMove(sectionTasks, oldIndex, newIndex)
-    console.log('🔄 Reordered tasks:', reorderedTasks.map(t => ({id: t.id, title: t.title, order: t.section_order})))
     
     // ✅ ACTUALIZACIÓN OPTIMISTA INMEDIATA DE UI
     const updatedReorderedTasks = reorderedTasks.map((task, index) => ({
@@ -988,8 +773,6 @@ const TaskItApp = () => {
     }))
 
     // Actualizar estado inmediatamente sin recargar desde BD
-    console.log('🔄 Updating UI optimistically...')
-    
     // Filtrar tareas de otras secciones y mantenerlas
     const otherTasks = tasks.filter(task => {
       // Excluir tareas de la sección actual
@@ -1002,11 +785,9 @@ const TaskItApp = () => {
     // ✅ ACTUALIZACIÓN OPTIMISTA INMEDIATA - Combinar tareas de otras secciones con las reordenadas
     const newTasksArray = [...otherTasks, ...updatedReorderedTasks]
     setTasks(newTasksArray)
-    console.log('✅ UI updated optimistically')
     
     // 2. PERSISTIR EN BD EN BACKGROUND SIN RECARGAR UI
     setTimeout(async () => {
-      console.log('💾 Starting background save...')
       let hasErrors = false
       
       // ✅ COMPARAR CON EL ORDEN ORIGINAL, NO CON section_order
@@ -1016,30 +797,20 @@ const TaskItApp = () => {
         const newOrder = i + 1
         const oldOrder = originalIndex + 1
         
-        console.log(`📊 Task ${reorderedTask.title}: original position ${oldOrder} → new position ${newOrder}`)
-        
         // ✅ ACTUALIZAR SIEMPRE si la posición cambió
         if (oldOrder !== newOrder) {
-          console.log(`💾 Updating task ${reorderedTask.id} from position ${oldOrder} to ${newOrder}`)
           try {
             await updateTaskOrder(reorderedTask.id, newOrder)
-            console.log(`✅ Task ${reorderedTask.id} updated successfully`)
           } catch (error) {
-            console.error('❌ Error updating task order:', error)
+            console.error('Error updating task order:', error)
             hasErrors = true
           }
-        } else {
-          console.log(`⏭️ Task ${reorderedTask.title} stays in same position`)
         }
       }
       
       // ✅ SI HAY ERRORES, RECARGAR PARA RESTAURAR ORDEN ORIGINAL
       if (hasErrors) {
-        console.log('🔄 Errors detected, reloading tasks to restore correct order...')
         await loadTasks()
-        console.log('🔄 Tasks reloaded after errors')
-      } else {
-        console.log('✅ Background save completed successfully - UI already updated')
       }
     }, 100) // Pequeño delay para que el usuario vea el cambio inmediato
   }
@@ -1554,13 +1325,11 @@ const TaskItApp = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      console.log('🔄 Modal Toggle Complete clicked for task:', selectedTask.id, 'Current state:', selectedTask.completed)
                       try {
                         toggleTaskComplete(selectedTask.id)
                         setSelectedTask({...selectedTask, completed: !selectedTask.completed})
-                        console.log('✅ Modal Toggle Complete executed successfully')
                       } catch (error) {
-                        console.error('❌ Error in Modal Toggle Complete:', error)
+                        console.error('Error in Modal Toggle Complete:', error)
                         alert('Error al cambiar el estado de la tarea. Inténtalo de nuevo.')
                       }
                     }}

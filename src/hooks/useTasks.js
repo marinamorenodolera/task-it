@@ -68,11 +68,9 @@ export const useTasks = () => {
             section_order: task.section_order || 0,
             is_expanded: task.is_expanded || false,
             
-            // ✅ NUEVO CAMPO PARA SECCIONES CUSTOM:
-            section_id: task.section_id || 'inbox',
             
             addedAt: new Date(task.created_at),
-            deadline: task.deadline ? new Date(task.deadline) : null,
+            deadline: task.deadline ? new Date(task.deadline) : (task.due_date ? new Date(task.due_date) : null),
             amount: task.amount,
             link: task.link,
             created_at: task.created_at,
@@ -110,7 +108,7 @@ export const useTasks = () => {
 
 
     try {
-      // Preparar datos para Supabase
+      // Preparar datos para Supabase - solo campos esenciales para evitar error 400
       const dbData = {
         user_id: user.id,
         title: taskData.title,
@@ -121,16 +119,11 @@ export const useTasks = () => {
         is_big_3_today: taskData.important || false,
         completed: false,
         priority: taskData.priority || 'normal',
-        
-        // 🆕 CAMPOS DE SUBTAREAS:
-        parent_task_id: taskData.parent_task_id || null,
-        subtask_order: taskData.subtask_order || 0,
-        section_order: taskData.section_order || 0,
-        is_expanded: taskData.is_expanded || false,
-        
-        // ✅ NUEVO CAMPO PARA SECCIONES CUSTOM:
-        section_id: taskData.section_id || 'inbox'
+        status: taskData.status || 'inbox'
       }
+      
+      // Solo agregar campos opcionales si están definidos
+      if (taskData.parent_task_id) dbData.parent_task_id = taskData.parent_task_id
       
 
       const { data, error } = await supabase
@@ -163,14 +156,12 @@ export const useTasks = () => {
         updated_at: data.updated_at,
         attachments: [],
         
-        // 🆕 CAMPOS DE SUBTAREAS MAPEADOS:
-        parent_task_id: data.parent_task_id,
+        // Campos opcionales solo si existen
+        parent_task_id: data.parent_task_id || null,
         subtask_order: data.subtask_order || 0,
         section_order: data.section_order || 0,
         is_expanded: data.is_expanded || false,
-        
-        // ✅ NUEVO CAMPO PARA SECCIONES CUSTOM:
-        section_id: data.section_id || 'inbox'
+        status: data.status || 'inbox'
       }
 
       setTasks(prev => [newTask, ...prev])
@@ -185,6 +176,11 @@ export const useTasks = () => {
   const updateTask = async (taskId, updates) => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
 
+    console.log('🔄 updateTask DEBUG - INICIO')
+    console.log('- taskId:', taskId)
+    console.log('- updates object:', updates)
+    console.log('- updates.title:', updates?.title)
+
     try {
       // Map component format to database format
       const dbUpdates = {}
@@ -194,11 +190,11 @@ export const useTasks = () => {
       if (updates.completed !== undefined) dbUpdates.completed = updates.completed
       if (updates.important !== undefined) dbUpdates.is_big_3_today = updates.important
       if (updates.deadline !== undefined) dbUpdates.deadline = updates.deadline?.toISOString() || null
+      if (updates.due_date !== undefined) dbUpdates.deadline = updates.due_date
       if (updates.amount !== undefined) dbUpdates.amount = updates.amount
       if (updates.link !== undefined) dbUpdates.link = updates.link
       if (updates.status !== undefined) dbUpdates.status = updates.status
       if (updates.priority !== undefined) dbUpdates.priority = updates.priority
-      if (updates.section_id !== undefined) dbUpdates.section_id = updates.section_id
 
 
       const { data, error } = await supabase
@@ -351,12 +347,7 @@ export const useTasks = () => {
     const task = tasks.find(t => t.id === taskId)
     if (!task) return { error: 'Tarea no encontrada' }
 
-    console.log('🔄 toggleWaitingStatus - Task completa:', task)
-    console.log('🔄 toggleWaitingStatus - Status actual:', task.status)
-    console.log('🔄 toggleWaitingStatus - Task ID:', taskId)
-    
     const newStatus = task.status === 'pending' ? 'inbox' : 'pending'
-    console.log('🔄 toggleWaitingStatus - Nuevo status:', newStatus)
     
     // Optimistic update - similar a toggleBig3
     setTasks(prev => prev.map(t => 
@@ -365,7 +356,6 @@ export const useTasks = () => {
     
     try {
       const result = await updateTask(taskId, { status: newStatus })
-      console.log('🔄 toggleWaitingStatus - Resultado Supabase:', result)
       
       if (result.error) {
         // Revertir si hay error
@@ -376,7 +366,7 @@ export const useTasks = () => {
       
       return result
     } catch (error) {
-      console.error('🔄 Error en toggleWaitingStatus:', error)
+      console.error('Error en toggleWaitingStatus:', error)
       // Revertir cambio
       setTasks(prev => prev.map(t => 
         t.id === taskId ? { ...t, status: task.status } : t
@@ -489,7 +479,17 @@ export const useTasks = () => {
   }
 
   const deleteSubtask = async (subtaskId) => {
-    return await deleteTask(subtaskId)
+    console.log('🔄 deleteSubtask HOOK - INICIO')
+    console.log('- subtaskId recibido:', subtaskId)
+    
+    try {
+      const result = await deleteTask(subtaskId)
+      console.log('✅ deleteTask resultado:', result)
+      return result
+    } catch (error) {
+      console.error('❌ Error en deleteSubtask hook:', error)
+      throw error
+    }
   }
 
   const updateTaskOrder = async (taskId, newOrder) => {

@@ -459,14 +459,38 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             <div className="flex gap-2">
               <BaseButton
                 onClick={async () => {
-                  const updatedTask = {
-                    ...editedTask,
-                    due_date: attachmentData.deadline
+                  console.log('📅 AÑADIR FECHA LÍMITE - DEBUG')
+                  console.log('- task.id:', task.id)
+                  console.log('- attachmentData.deadline:', attachmentData.deadline)
+                  console.log('- editedTask antes:', editedTask)
+                  
+                  try {
+                    const updatedTask = {
+                      ...editedTask,
+                      deadline: new Date(attachmentData.deadline), // Para UI
+                      due_date: attachmentData.deadline // Para DB (legacy)
+                    }
+                    console.log('- updatedTask después:', updatedTask)
+                    
+                    const result = await onUpdate(task.id, updatedTask)
+                    
+                    if (!result || !result.error) {
+                      console.log('✅ Fecha límite añadida exitosamente')
+                      // Actualizar estado local para UI inmediata
+                      setEditedTask(prev => ({
+                        ...prev,
+                        deadline: new Date(attachmentData.deadline)
+                      }))
+                      setSelectedAttachmentType(null)
+                      setAttachmentData({})
+                    } else {
+                      console.error('❌ Error al añadir fecha límite:', result.error)
+                      alert('Error al añadir fecha límite: ' + result.error)
+                    }
+                  } catch (error) {
+                    console.error('❌ Error inesperado:', error)
+                    alert('Error inesperado al añadir fecha límite')
                   }
-                  setEditedTask(updatedTask)
-                  await onUpdate(updatedTask)
-                  setSelectedAttachmentType(null)
-                  setAttachmentData({})
                 }}
                 disabled={!attachmentData.deadline}
                 className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
@@ -1017,29 +1041,6 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             </div>
           )}
           
-          {/* Información adicional compacta */}
-          {!isEditing && (
-            <div className="flex flex-wrap gap-3">
-              {task.deadline && (
-                <div className="flex items-center gap-1 text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
-                  <Calendar size={14} />
-                  <span>{formatTaskDeadline(task.deadline)}</span>
-                </div>
-              )}
-              {task.amount && (
-                <div className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-2 py-1 rounded-lg">
-                  <Euro size={14} />
-                  <span>{task.amount}€</span>
-                </div>
-              )}
-              {task.link && (
-                <div className="flex items-center gap-1 text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
-                  <Link size={14} />
-                  <span className="truncate max-w-[120px]">Enlace</span>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Section Selector - Estilo Gestionar Tareas */}
@@ -1048,68 +1049,53 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         </div>
         
 
-        {/* Metadata Cards */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-4">
-          <div className="p-6">
-            <div className="grid grid-cols-2 gap-3">
-              {deadline && (
-                <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-orange-700">
-                    <Calendar size={18} />
-                    <div>
-                      <p className="text-xs font-medium text-orange-600">Fecha límite</p>
-                      <p className="text-sm font-semibold">{deadline}</p>
-                    </div>
+        {/* Metadata Grid - Con fecha límite sin recuadro */}
+        {(deadline || task.amount || task.link) && (
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            {deadline && (
+              <div className="col-span-2 text-center">
+                <div className="flex items-center justify-center gap-2 text-orange-700">
+                  <Calendar size={18} />
+                  <div>
+                    <p className="text-xs font-medium text-orange-600">Fecha límite</p>
+                    <p className="text-sm font-semibold">{deadline}</p>
                   </div>
                 </div>
-              )}
-              
-              {task.amount && (
-                <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-green-700">
-                    <Euro size={18} />
-                    <div>
-                      <p className="text-xs font-medium text-green-600">Importe</p>
-                      <p className="text-sm font-semibold">{task.amount}€</p>
-                    </div>
+              </div>
+            )}
+            
+            {task.amount && (
+              <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+                <div className="flex items-center gap-2 text-green-700">
+                  <Euro size={18} />
+                  <div>
+                    <p className="text-xs font-medium text-green-600">Importe</p>
+                    <p className="text-sm font-semibold">{task.amount}€</p>
                   </div>
                 </div>
-              )}
-              
-              {task.link && (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 col-span-2">
-                  <div className="flex items-center gap-2 text-blue-700">
-                    <Link size={18} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-blue-600">Enlace</p>
-                      <a 
-                        href={task.link} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-sm font-semibold hover:underline truncate block"
-                      >
-                        {task.link}
-                      </a>
-                    </div>
+              </div>
+            )}
+            
+            {task.link && (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 col-span-2">
+                <div className="flex items-center gap-2 text-blue-700">
+                  <Link size={18} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-blue-600">Enlace</p>
+                    <a 
+                      href={task.link} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold hover:underline truncate block"
+                    >
+                      {task.link}
+                    </a>
                   </div>
                 </div>
-              )}
-            </div>
-
-            {/* Creation Date */}
-            <div className="text-center pt-4 border-t border-gray-100">
-              <p className="text-sm text-gray-500">
-                Creada el {new Date(task.created_at || Date.now()).toLocaleDateString('es-ES', {
-                  year: 'numeric',
-                  month: 'long', 
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </p>
-            </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Attachments Section */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-4">
@@ -1317,7 +1303,19 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          deleteSubtask(subtask.id)
+                          console.log('🗑️ CLICK ELIMINAR SUBTAREA - INICIO')
+                          console.log('- Subtarea a eliminar:', subtask)
+                          console.log('- ID de subtarea:', subtask.id)
+                          console.log('- Total subtareas antes:', getSubtasks(task.id).length)
+                          
+                          try {
+                            deleteSubtask(subtask.id)
+                            console.log('✅ deleteSubtask() ejecutada correctamente')
+                          } catch (error) {
+                            console.error('❌ Error al ejecutar deleteSubtask:', error)
+                          }
+                          
+                          console.log('🗑️ CLICK ELIMINAR SUBTAREA - FIN')
                         }}
                         className="text-red-400 hover:text-red-600 transition-colors p-1"
                         title="Eliminar subtarea"
@@ -1398,6 +1396,19 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
           >
             Eliminar tarea
           </button>
+        </div>
+
+        {/* Creation Date - Movida después del botón eliminar */}
+        <div className="text-center pt-4 border-t border-gray-100 mt-6">
+          <p className="text-sm text-gray-500">
+            Creada el {new Date(task.created_at || Date.now()).toLocaleDateString('es-ES', {
+              year: 'numeric',
+              month: 'long', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </p>
         </div>
       </div>
     </div>

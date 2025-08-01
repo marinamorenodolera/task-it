@@ -1,5 +1,5 @@
 import { 
-  Folder, Flame, Zap, Calendar, Target, Lightbulb, 
+  Folder, Flame, Zap, Activity, Calendar, Target, Lightbulb, 
   Rocket, BarChart, Star, Briefcase, Home, Palette,
   Clock, Heart, Shield, Trophy, Users, Settings
 } from 'lucide-react'
@@ -8,6 +8,7 @@ export const SECTION_ICON_MAP = {
   folder: { icon: Folder, color: 'text-blue-500' },
   flame: { icon: Flame, color: 'text-red-500' },
   zap: { icon: Zap, color: 'text-purple-500' },
+  activity: { icon: Activity, color: 'text-green-500' },
   calendar: { icon: Calendar, color: 'text-green-500' },
   target: { icon: Target, color: 'text-purple-500' },
   lightbulb: { icon: Lightbulb, color: 'text-amber-500' },
@@ -35,6 +36,7 @@ export const ICON_OPTIONS = [
   { icon: Folder, name: 'folder', color: 'text-blue-500' },
   { icon: Flame, name: 'flame', color: 'text-red-500' },
   { icon: Zap, name: 'zap', color: 'text-purple-500' },
+  { icon: Activity, name: 'activity', color: 'text-green-500' },
   { icon: Calendar, name: 'calendar', color: 'text-green-500' },
   { icon: Target, name: 'target', color: 'text-purple-500' },
   { icon: Lightbulb, name: 'lightbulb', color: 'text-amber-500' },

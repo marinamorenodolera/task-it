@@ -410,7 +410,7 @@ export default function PreferencesSection() {
                         setNewSectionData({
                           name: section.name,
                           icon: section.icon,
-                          filterType: section.filterType || 'manual'
+                          filterType: 'manual'
                         })
                         setShowNewSectionModal(true)
                       }}

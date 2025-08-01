@@ -121,8 +121,21 @@ const TaskItApp = () => {
   // USER PREFERENCES HOOK
   const { 
     sectionOrder: userSectionOrder, 
-    visibleSections
+    visibleSections,
+    forceResetWithActivities
   } = useUserPreferences()
+  
+  // 🎯 DEBUG ACTIVITIES TEMPORAL
+  console.log('🎯 DEBUG ACTIVITIES:')
+  console.log('- todayActivities:', todayActivities)
+  console.log('- activityStats:', activityStats)
+  console.log('- visibleSections:', visibleSections)
+  console.log('- section activities visible?', visibleSections.some(s => s.id === 'activities'))
+  
+  // 🚨 EXPONER FUNCIÓN DE RESET EN WINDOW PARA DEBUG
+  if (typeof window !== 'undefined') {
+    window.forceResetWithActivities = forceResetWithActivities
+  }
   
 
   // Importar función shared para iconos
@@ -132,6 +145,7 @@ const TaskItApp = () => {
       folder: { icon: Folder, color: 'text-blue-500' },
       flame: { icon: Flame, color: 'text-red-500' },
       zap: { icon: Zap, color: 'text-purple-500' },
+      activity: { icon: Activity, color: 'text-green-500' },
       calendar: { icon: Calendar, color: 'text-green-500' },
       target: { icon: Target, color: 'text-purple-500' },
       lightbulb: { icon: Lightbulb, color: 'text-amber-500' },
@@ -157,10 +171,8 @@ const TaskItApp = () => {
     }
     
     const iconData = iconMap[iconName]
-    console.log('🔍 Icon data found:', iconData)
     
     if (!iconData) {
-      console.log('❌ No icon data found, using default folder')
       return <Folder size={size} className="text-gray-500" />
     }
     
@@ -197,6 +209,8 @@ const TaskItApp = () => {
 
   // FUNCIÓN PARA RENDERIZAR UNA SECCIÓN
   const renderSection = (section) => {
+    console.log('🔍 Rendering section:', section.id, section.name, 'visible:', section.visible)
+    
     if (!section.visible) return null
 
     // Caso especial para rituales
@@ -280,6 +294,184 @@ const TaskItApp = () => {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )
+    }
+
+    // Caso especial para actividades
+    if (section.id === 'activities') {
+      console.log('🎯 RENDERING ACTIVITIES SECTION!')
+      console.log('- todayActivities count:', todayActivities?.length || 0)
+      console.log('- activityStats:', activityStats)
+      return (
+        <div key={section.id}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              {renderSectionIcon(section.icon)}
+              {section.name}
+              <span className="text-sm text-gray-500 font-normal">({activityStats.totalTimeToday || 0} min hoy)</span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentView('activity-settings')}
+                className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
+                title="Configurar actividades predeterminadas"
+              >
+                <Settings size={16} />
+              </button>
+              <button
+                onClick={() => setShowActivityForm(!showActivityForm)}
+                className="px-3 py-1 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors"
+              >
+                + Añadir
+              </button>
+            </div>
+          </div>
+
+          {/* Activity Form */}
+          {showActivityForm && (
+            <div className="mb-4 p-4 bg-white rounded-xl border border-gray-200 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de actividad
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={newActivity.type}
+                      onChange={(e) => setNewActivity(prev => ({ ...prev, type: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="Ej: Pilates, Correr, Leer..."
+                      list="predefined-activities"
+                    />
+                    <datalist id="predefined-activities">
+                      {predefinedActivities.map((activity) => (
+                        <option 
+                          key={activity.id} 
+                          value={activity.type}
+                          data-duration={activity.duration}
+                        />
+                      ))}
+                    </datalist>
+                  </div>
+                  {predefinedActivities.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {predefinedActivities.slice(0, 4).map((activity) => (
+                        <button
+                          key={activity.id}
+                          type="button"
+                          onClick={() => setNewActivity(prev => ({
+                            ...prev,
+                            type: activity.type,
+                            duration: activity.duration.toString()
+                          }))}
+                          className="px-2 py-1 text-xs rounded-full border transition-colors hover:border-green-500 bg-gray-100 text-gray-700 border-gray-200 hover:bg-green-50"
+                        >
+                          {activity.type} ({activity.duration}min)
+                        </button>
+                      ))}
+                      {predefinedActivities.length > 4 && (
+                        <span className="text-xs text-gray-500 px-2 py-1">
+                          +{predefinedActivities.length - 4} más...
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Duración (minutos)
+                  </label>
+                  <input
+                    type="number"
+                    value={newActivity.duration}
+                    onChange={(e) => setNewActivity(prev => ({ ...prev, duration: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="50"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Fecha
+                  </label>
+                  <input
+                    type="date"
+                    value={newActivity.date}
+                    onChange={(e) => setNewActivity(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    max={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowActivityForm(false)}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddActivity}
+                  disabled={!newActivity.type.trim() || !newActivity.duration}
+                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Añadir Actividad
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Activities List - Diseño original simple */}
+          <div className="space-y-2">
+            {todayActivities.map((activity) => (
+              <div
+                key={activity.id}
+                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">
+                      {activity.type} {activity.duration}min
+                    </span>
+                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <Calendar size={12} />
+                      <span>
+                        {new Date(activity.created_at).toLocaleDateString('es-ES', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                        })} - {activity.time ? activity.time.slice(0, 5) : new Date(activity.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      await deleteActivity(activity.id);
+                    } catch (error) {
+                      console.error('Error eliminando actividad:', error);
+                    }
+                  }}
+                  className="p-1 text-red-400 hover:text-red-600 transition-colors"
+                  title="Eliminar actividad"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+            
+            {todayActivities.length === 0 && (
+              <div className="text-center py-6 text-gray-500">
+                <Zap size={48} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">No hay actividades registradas hoy</p>
+                <p className="text-xs">Cada movimiento cuenta - ¡Empieza ahora!</p>
+              </div>
+            )}
           </div>
         </div>
       )
@@ -1123,7 +1315,7 @@ const TaskItApp = () => {
             onClick={() => setShowTaskSelector(true)}
             className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors touch-manipulation"
           >
-            <CircleDot size={16} className="text-green-700" />
+            <Target size={16} className="text-green-700" />
             <span className="text-xs sm:text-sm font-medium">
               <span className="hidden sm:inline">Gestionar </span>Tareas
             </span>

@@ -5,16 +5,18 @@ import { supabase } from '@/lib/supabase'
 const DEFAULT_SECTION_ORDER = [
   { id: 'big3', name: 'Big 3', icon: 'star', visible: true, order: 0, isCustom: false },
   { id: 'rituals', name: 'Daily Rituals', icon: 'zap', visible: true, order: 1, isCustom: false },
-  { id: 'urgent', name: 'Urgente', icon: 'flame', visible: true, order: 2, isCustom: false },
-  { id: 'waiting', name: 'En Espera', icon: 'clock', visible: true, order: 3, isCustom: false },
-  { id: 'routine', name: 'Otras Tareas', icon: 'folder', visible: true, order: 4, isCustom: false },
-  { id: 'completed', name: 'Completadas', icon: 'check-circle', visible: true, order: 5, isCustom: false }
+  { id: 'activities', name: 'Actividades', icon: 'activity', visible: true, order: 2, isCustom: false },
+  { id: 'urgent', name: 'Urgente', icon: 'flame', visible: true, order: 3, isCustom: false },
+  { id: 'waiting', name: 'En Espera', icon: 'clock', visible: true, order: 4, isCustom: false },
+  { id: 'routine', name: 'Otras Tareas', icon: 'folder', visible: true, order: 5, isCustom: false },
+  { id: 'completed', name: 'Completadas', icon: 'check-circle', visible: true, order: 6, isCustom: false }
 ]
 
 // Configuración de permisos por sección
 const SECTION_PERMISSIONS = {
   'big3': { canEdit: false, canDelete: false, canReorder: true },
   'rituals': { canEdit: false, canDelete: false, canReorder: true },
+  'activities': { canEdit: false, canDelete: false, canReorder: true },
   'urgent': { canEdit: false, canDelete: false, canReorder: true },
   'waiting': { canEdit: false, canDelete: false, canReorder: true },
   'routine': { canEdit: false, canDelete: false, canReorder: true },
@@ -205,6 +207,27 @@ export const useUserPreferences = () => {
     return await updateSectionOrder(DEFAULT_SECTION_ORDER)
   }
 
+  // 🚨 TEMPORAL - RESET COMPLETO CON ACTIVITIES
+  const forceResetWithActivities = async () => {
+    if (!user?.id) return { error: 'Usuario no autenticado' }
+    
+    console.log('🚨 FORCE RESET - Eliminando preferencias y recreando con activities')
+    
+    // Eliminar preferencias actuales
+    const { error: deleteError } = await supabase
+      .from('user_profiles')
+      .delete()
+      .eq('user_id', user.id)
+    
+    if (deleteError) {
+      console.error('Error eliminando preferencias:', deleteError)
+    }
+    
+    // Aplicar DEFAULT_SECTION_ORDER que incluye activities
+    setSectionOrder(DEFAULT_SECTION_ORDER)
+    return await updateSectionOrder(DEFAULT_SECTION_ORDER)
+  }
+
   // Crear nueva sección personalizada
   const createCustomSection = async (customSection) => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
@@ -281,6 +304,27 @@ export const useUserPreferences = () => {
     .filter(section => section.visible)
     .sort((a, b) => a.order - b.order)
 
+  // 🚨 TEMPORAL - FORZAR AÑADIR ACTIVITIES SECTION
+  useEffect(() => {
+    if (user?.id && !loading && sectionOrder.length > 0) {
+      const hasActivities = sectionOrder.some(s => s.id === 'activities')
+      if (!hasActivities) {
+        console.log('🚨 FORZANDO AÑADIR ACTIVITIES SECTION')
+        const activitiesSection = { 
+          id: 'activities', 
+          name: 'Actividades', 
+          icon: 'activity', 
+          visible: true, 
+          order: 2, 
+          isCustom: false 
+        }
+        const newOrder = [...sectionOrder, activitiesSection].sort((a, b) => a.order - b.order)
+        setSectionOrder(newOrder)
+        updateSectionOrder(newOrder)
+      }
+    }
+  }, [user?.id, loading, sectionOrder.length])
+
   return {
     sectionOrder,
     visibleSections,
@@ -295,6 +339,8 @@ export const useUserPreferences = () => {
     createCustomSection,
     editSection,
     deleteCustomSection,
-    SECTION_PERMISSIONS
+    SECTION_PERMISSIONS,
+    // 🚨 TEMPORAL:
+    forceResetWithActivities
   }
 }

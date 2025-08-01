@@ -43,6 +43,7 @@ import TaskCard from '@/components/tasks/TaskCard'
 import BaseButton from '@/components/ui/BaseButton'
 import ActivitySettings from '@/components/activities/ActivitySettings'
 import PreferencesSection from '@/components/features/settings/PreferencesSection'
+import { SECTION_ICON_MAP, ICON_OPTIONS } from '@/utils/sectionIcons'
 
 // ✅ DRAG AND DROP IMPORTS
 import {
@@ -123,42 +124,32 @@ const TaskItApp = () => {
     visibleSections
   } = useUserPreferences()
   
+  // 🚨 DEBUG TEMPORAL - visibleSections
+  console.log('🔍 VISIBLE SECTIONS DEBUG:')
+  console.log('visibleSections:', visibleSections)
+  console.log('visibleSections IDs:', visibleSections.map(s => s.id))
+  console.log('========================')
 
-  // Importar función shared para iconos
-  const renderSectionIcon = (iconName, size = 20) => {
-    
-    const iconMap = {
-      folder: { icon: Folder, color: 'text-blue-500' },
-      flame: { icon: Flame, color: 'text-red-500' },
-      zap: { icon: Zap, color: 'text-purple-500' },
-      calendar: { icon: Calendar, color: 'text-green-500' },
-      target: { icon: Target, color: 'text-purple-500' },
-      lightbulb: { icon: Lightbulb, color: 'text-amber-500' },
-      rocket: { icon: Rocket, color: 'text-indigo-500' },
-      'bar-chart': { icon: BarChart, color: 'text-cyan-500' },
-      star: { icon: Star, color: 'text-yellow-500' },
-      briefcase: { icon: Briefcase, color: 'text-gray-600' },
-      home: { icon: Home, color: 'text-green-600' },
-      palette: { icon: Palette, color: 'text-pink-500' },
-      clock: { icon: Clock, color: 'text-orange-500' },
-      heart: { icon: Heart, color: 'text-red-400' },
-      shield: { icon: Shield, color: 'text-emerald-500' },
-      'check-circle': { icon: CheckCircle2, color: 'text-green-500' },
-      trophy: { icon: Trophy, color: 'text-yellow-600' },
-      users: { icon: UsersIcon, color: 'text-blue-600' },
-      settings: { icon: SettingsIcon, color: 'text-gray-500' },
-      // Emoji mappings
-      '⭐': { icon: Star, color: 'text-yellow-500' },
-      '⚡': { icon: Zap, color: 'text-purple-500' },
-      '⏳': { icon: Clock, color: 'text-orange-500' },
-      '📋': { icon: Folder, color: 'text-blue-500' },
-      '✅': { icon: CheckCircle2, color: 'text-green-500' }
+  // Función helper para renderizar iconos de sección con colores correctos
+  const renderSectionIconLocal = (sectionId, size = 20) => {
+    // Mapeo de IDs de sección a nombres de iconos
+    const sectionIconMapping = {
+      'big_three': 'star',        // ⭐ Star amarillo
+      'en_espera': 'clock',       // ⏰ Clock naranja  
+      'otras_tareas': 'folder',   // 📁 Folder azul
+      'completadas': 'check-circle', // ✅ CircleCheck verde
+      'urgent': 'flame',          // 🔥 Flame rojo
+      'rituals': 'zap',          // ⚡ Zap púrpura
+      'activities': 'activity'    // 📊 Activity verde
     }
     
-    const iconData = iconMap[iconName]
+    const iconName = sectionIconMapping[sectionId] || 'folder'
+    const iconData = SECTION_ICON_MAP[iconName]
     
     if (!iconData) {
-      return <Folder size={size} className="text-gray-500" />
+      const fallbackIcon = SECTION_ICON_MAP['folder']
+      const IconComponent = fallbackIcon.icon
+      return <IconComponent size={size} className={fallbackIcon.color} />
     }
     
     const IconComponent = iconData.icon
@@ -167,18 +158,38 @@ const TaskItApp = () => {
 
   // FUNCIÓN PARA OBTENER TAREAS DE CADA SECCIÓN
   const getSectionTasks = (sectionId) => {
+    console.log('=== DEBUG getSectionTasks ===')
+    console.log('sectionId:', sectionId)
+    console.log('urgentTasks length:', urgentTasks.length)
+    console.log('importantTasks length:', importantTasks.length)
+    console.log('waitingTasks length:', waitingTasks.length)
+    console.log('routineTasks length:', routineTasks.length)
+    console.log('completedTasks length:', completedTasks.length)
+    
     switch(sectionId) {
-      case 'big3':
+      case 'big_three':
+        console.log('Returning importantTasks:', importantTasks.length)
         return importantTasks || []
       case 'urgent':
+        console.log('Returning urgentTasks:', urgentTasks.length)
         return urgentTasks || []
-      case 'waiting':  
+      case 'en_espera':  
+        console.log('Returning waitingTasks:', waitingTasks.length)
         return waitingTasks || []
-      case 'routine':
+      case 'otras_tareas':
+        console.log('Returning routineTasks:', routineTasks.length)
         return routineTasks || []
-      case 'completed':
+      case 'completadas':
+        console.log('Returning completedTasks:', completedTasks.length)
         return completedTasks || []
+      case 'rituals':
+        console.log('Returning rituals: 0 (TODO)')
+        return [] // TODO: Implementar rituals tasks filter
+      case 'activities':
+        console.log('Returning activities: 0 (TODO)')
+        return [] // TODO: Implementar activities tasks filter
       default:
+        console.log('Default case for:', sectionId)
         // ✅ MANEJAR SECCIONES CUSTOM (DESHABILITADO - section_id no existe en tabla)
         if (sectionId.startsWith('custom_')) {
           return [] // Por ahora retornamos array vacío hasta que se implemente section_id
@@ -197,7 +208,7 @@ const TaskItApp = () => {
         <div key={section.id}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              {renderSectionIcon(section.icon)}
+              {renderSectionIconLocal('rituals')}
               {section.name} ({completedRituals}/{totalRituals})
               <span className="text-xs text-gray-500 font-normal">Reset: 6:00 AM</span>
             </h2>
@@ -278,7 +289,7 @@ const TaskItApp = () => {
     }
 
     // Caso especial para tareas completadas
-    if (section.id === 'completed') {
+    if (section.id === 'completadas') {
       const allCompletedItems = [
         ...rituals.filter(ritual => ritual.completed),
         ...(completedTasks || [])
@@ -293,7 +304,7 @@ const TaskItApp = () => {
               onClick={() => setShowCompletedTasks(!showCompletedTasks)}
               className="flex items-center gap-2 text-lg font-semibold text-gray-900 hover:text-gray-700 transition-colors"
             >
-              {renderSectionIcon(section.icon)}
+              {renderSectionIconLocal('completadas')}
               {section.name} ({allCompletedItems.length})
               {showCompletedTasks ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -333,9 +344,9 @@ const TaskItApp = () => {
       return (
         <div key={section.id}>
           <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            {renderSectionIcon(section.icon)}
+            {renderSectionIconLocal(section.id)}
             {section.name} (0)
-            {section.id === 'big3' && '/3'}
+            {section.id === 'big_three' && '/3'}
           </h2>
         </div>
       )
@@ -345,9 +356,9 @@ const TaskItApp = () => {
     return (
       <div key={section.id}>
         <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-          {renderSectionIcon(section.icon)}
+          {renderSectionIconLocal(section.id)}
           {section.name} ({sectionTasks.length})
-          {section.id === 'big3' && '/3'}
+          {section.id === 'big_three' && '/3'}
         </h2>
         
         {section.id === 'urgent' && (
@@ -356,13 +367,13 @@ const TaskItApp = () => {
           </p>
         )}
         
-        {section.id === 'waiting' && (
+        {section.id === 'en_espera' && (
           <p className="text-sm text-gray-600 mb-3">
             Tareas iniciadas esperando respuesta o feedback externo.
           </p>
         )}
         
-        {section.id === 'routine' && (
+        {section.id === 'otras_tareas' && (
           <p className="text-sm text-gray-600 mb-3">
             Tareas creadas rápidas. Selecciona las más importantes para Big 3.
           </p>
@@ -934,16 +945,16 @@ const TaskItApp = () => {
         onToggleWaitingStatus={async (taskId) => {
           // ✅ Actualizar selectedTask inmediatamente para feedback visual
           if (selectedTask?.id === taskId) {
-            const newStatus = selectedTask.status === 'pending' ? 'inbox' : 'pending'
-            setSelectedTask({...selectedTask, status: newStatus})
+            const newSection = selectedTask.section === 'en_espera' ? 'otras_tareas' : 'en_espera'
+            setSelectedTask({...selectedTask, section: newSection})
           }
           await toggleWaitingStatus(taskId)
         }}
         onToggleUrgent={async (taskId) => {
           // ✅ Actualizar selectedTask inmediatamente para feedback visual
           if (selectedTask?.id === taskId) {
-            const newPriority = selectedTask.priority === 'urgent' ? 'normal' : 'urgent' 
-            setSelectedTask({...selectedTask, priority: newPriority})
+            const newSection = selectedTask.section === 'urgent' ? 'otras_tareas' : 'urgent'
+            setSelectedTask({...selectedTask, section: newSection})
           }
           await toggleUrgent(taskId)
         }}
@@ -1144,7 +1155,7 @@ const TaskItApp = () => {
       {/* Lista de Tareas */}
       <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
         
-        {/* RENDERIZADO DINÁMICO DE SECCIONES */}
+        {/* RENDERIZADO DINÁMICO DE SECCIONES RESPETANDO CONFIGURACIÓN DEL USUARIO */}
         {visibleSections.map((section) => renderSection(section))}
       </div>
 

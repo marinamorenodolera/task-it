@@ -1,7 +1,8 @@
+import React from 'react'
 import { 
   Folder, Flame, Zap, Activity, Calendar, Target, Lightbulb, 
   Rocket, BarChart, Star, Briefcase, Home, Palette,
-  Clock, Heart, Shield, Trophy, Users, Settings
+  Clock, Heart, Shield, Trophy, Users, Settings, CheckCircle2
 } from 'lucide-react'
 
 export const SECTION_ICON_MAP = {
@@ -24,12 +25,13 @@ export const SECTION_ICON_MAP = {
   trophy: { icon: Trophy, color: 'text-yellow-600' },
   users: { icon: Users, color: 'text-blue-600' },
   settings: { icon: Settings, color: 'text-gray-500' },
+  'check-circle': { icon: CheckCircle2, color: 'text-green-500' },
   // Emoji to Lucide icon mappings
   '⭐': { icon: Star, color: 'text-yellow-500' },
   '⚡': { icon: Zap, color: 'text-purple-500' },
   '⏳': { icon: Clock, color: 'text-orange-500' },
   '📋': { icon: Briefcase, color: 'text-gray-600' },
-  '✅': { icon: Target, color: 'text-green-500' }
+  '✅': { icon: CheckCircle2, color: 'text-green-500' }
 }
 
 export const ICON_OPTIONS = [
@@ -54,12 +56,5 @@ export const ICON_OPTIONS = [
   { icon: Settings, name: 'settings', color: 'text-gray-500' }
 ]
 
-export const renderSectionIcon = (iconName, size = 20, className = '') => {
-  const iconData = SECTION_ICON_MAP[iconName]
-  if (!iconData) {
-    return <Folder size={size} className={`text-gray-500 ${className}`} />
-  }
-  
-  const IconComponent = iconData.icon
-  return <IconComponent size={size} className={`${iconData.color} ${className}`} />
-}
+// Helper function removed to avoid circular dependencies
+// Components should use SECTION_ICON_MAP directly

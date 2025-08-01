@@ -3,24 +3,24 @@ import { useAuth } from './useAuth'
 import { supabase } from '@/lib/supabase'
 
 const DEFAULT_SECTION_ORDER = [
-  { id: 'big3', name: 'Big 3', icon: 'star', visible: true, order: 0, isCustom: false },
+  { id: 'big_three', name: 'Big 3', icon: 'star', visible: true, order: 0, isCustom: false },
   { id: 'rituals', name: 'Daily Rituals', icon: 'zap', visible: true, order: 1, isCustom: false },
   { id: 'activities', name: 'Actividades', icon: 'activity', visible: true, order: 2, isCustom: false },
   { id: 'urgent', name: 'Urgente', icon: 'flame', visible: true, order: 3, isCustom: false },
-  { id: 'waiting', name: 'En Espera', icon: 'clock', visible: true, order: 4, isCustom: false },
-  { id: 'routine', name: 'Otras Tareas', icon: 'folder', visible: true, order: 5, isCustom: false },
-  { id: 'completed', name: 'Completadas', icon: 'check-circle', visible: true, order: 6, isCustom: false }
+  { id: 'en_espera', name: 'En Espera', icon: 'clock', visible: true, order: 4, isCustom: false },
+  { id: 'otras_tareas', name: 'Otras Tareas', icon: 'folder', visible: true, order: 5, isCustom: false },
+  { id: 'completadas', name: 'Completadas', icon: 'check-circle', visible: true, order: 6, isCustom: false }
 ]
 
 // Configuración de permisos por sección
 const SECTION_PERMISSIONS = {
-  'big3': { canEdit: false, canDelete: false, canReorder: true },
+  'big_three': { canEdit: false, canDelete: false, canReorder: true },
   'rituals': { canEdit: false, canDelete: false, canReorder: true },
   'activities': { canEdit: false, canDelete: false, canReorder: true },
   'urgent': { canEdit: false, canDelete: false, canReorder: true },
-  'waiting': { canEdit: false, canDelete: false, canReorder: true },
-  'routine': { canEdit: false, canDelete: false, canReorder: true },
-  'completed': { canEdit: false, canDelete: false, canReorder: true }
+  'en_espera': { canEdit: false, canDelete: false, canReorder: true },
+  'otras_tareas': { canEdit: false, canDelete: false, canReorder: true },
+  'completadas': { canEdit: false, canDelete: false, canReorder: true }
 }
 
 export const useUserPreferences = () => {
@@ -304,9 +304,21 @@ export const useUserPreferences = () => {
     .filter(section => section.visible)
     .sort((a, b) => a.order - b.order)
 
-  // 🚨 TEMPORAL - FORZAR AÑADIR ACTIVITIES SECTION
+  // 🚨 TEMPORAL - FORZAR RESET COMPLETO PARA ACTUALIZAR IDs
   useEffect(() => {
     if (user?.id && !loading && sectionOrder.length > 0) {
+      // Verificar si hay IDs obsoletos
+      const hasOldIds = sectionOrder.some(s => 
+        s.id === 'big3' || s.id === 'waiting' || s.id === 'routine' || s.id === 'completed'
+      )
+      
+      if (hasOldIds) {
+        console.log('🚨 DETECTADOS IDs OBSOLETOS - FORZANDO RESET COMPLETO')
+        console.log('IDs actuales:', sectionOrder.map(s => s.id))
+        forceResetWithActivities()
+        return
+      }
+      
       const hasActivities = sectionOrder.some(s => s.id === 'activities')
       if (!hasActivities) {
         console.log('🚨 FORZANDO AÑADIR ACTIVITIES SECTION')

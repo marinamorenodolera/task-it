@@ -38,6 +38,13 @@ export const useTasks = () => {
 
       if (error) throw error
 
+      // 🚨 DEBUG TEMPORAL - QUERY RESULT
+      console.log('🔍 LOADTASKS DEBUG:')
+      console.log('- User ID:', user.id)
+      console.log('- Raw data from Supabase:', data?.length, 'tasks')
+      console.log('- Sample raw task:', data?.[0])
+      console.log('========================')
+
       // Map database fields to component expected format and load attachments
       const mappedTasks = await Promise.all(
         data.map(async (task) => {
@@ -61,6 +68,8 @@ export const useTasks = () => {
             important: task.is_big_3_today, // Map Big 3 to important
             status: task.status || 'inbox', // Map status with default
             priority: task.priority || 'normal', // Map priority with default
+            page: task.page || 'daily', // Map page with default
+            section: task.section, // Map section exactly as it comes from DB
             
             // 🆕 CAMPOS DE SUBTAREAS VERIFICADOS EN SUPABASE:
             parent_task_id: task.parent_task_id,
@@ -79,6 +88,13 @@ export const useTasks = () => {
           }
         })
       )
+
+      // 🚨 DEBUG TEMPORAL - MAPPED TASKS
+      console.log('🗂️ MAPPED TASKS DEBUG:')
+      console.log('- Mapped tasks length:', mappedTasks.length)
+      console.log('- Sample mapped task:', mappedTasks[0])
+      console.log('- Sample page/section:', mappedTasks[0]?.page, '/', mappedTasks[0]?.section)
+      console.log('========================')
 
       setTasks(mappedTasks)
       setError(null)
@@ -119,7 +135,9 @@ export const useTasks = () => {
         is_big_3_today: taskData.important || false,
         completed: false,
         priority: taskData.priority || 'normal',
-        status: taskData.status || 'inbox'
+        status: taskData.status || 'inbox',
+        page: taskData.page || 'daily',
+        section: taskData.section || 'otras_tareas'  // Keep default for new tasks
       }
       
       // Solo agregar campos opcionales si están definidos
@@ -161,7 +179,9 @@ export const useTasks = () => {
         subtask_order: data.subtask_order || 0,
         section_order: data.section_order || 0,
         is_expanded: data.is_expanded || false,
-        status: data.status || 'inbox'
+        status: data.status || 'inbox',
+        page: data.page || 'daily',
+        section: data.section || 'otras_tareas'  // Keep default for new tasks
       }
 
       setTasks(prev => [newTask, ...prev])
@@ -195,6 +215,8 @@ export const useTasks = () => {
       if (updates.link !== undefined) dbUpdates.link = updates.link
       if (updates.status !== undefined) dbUpdates.status = updates.status
       if (updates.priority !== undefined) dbUpdates.priority = updates.priority
+      if (updates.page !== undefined) dbUpdates.page = updates.page
+      if (updates.section !== undefined) dbUpdates.section = updates.section
 
 
       const { data, error } = await supabase
@@ -252,9 +274,11 @@ export const useTasks = () => {
 
     // 1. Optimistic update - cambio inmediato
     const newCompletedState = !task.completed
+    const newSection = task.section === 'completadas' ? 'otras_tareas' : 'completadas'
+    
     setTasks(prev => prev.map(t => 
       t.id === taskId 
-        ? { ...t, completed: newCompletedState, justCompleted: newCompletedState } 
+        ? { ...t, completed: newCompletedState, section: newSection, justCompleted: newCompletedState } 
         : t
     ))
 
@@ -275,8 +299,10 @@ export const useTasks = () => {
     })
 
     try {
-      // 2. Actualizar en base de datos
-      const result = await updateTask(taskId, { completed: newCompletedState })
+      // 2. Actualizar en base de datos - SOLO section
+      const result = await updateTask(taskId, { 
+        section: newSection 
+      })
       
       if (result.error) {
         // Revertir si hay error
@@ -330,37 +356,38 @@ export const useTasks = () => {
   // Toggle Big 3 (important)
   const toggleBig3 = async (taskId) => {
     const task = tasks.find(t => t.id === taskId)
-    if (!task) return
+    if (!task) return { error: 'Tarea no encontrada' }
 
     // Check Big 3 limit
-    const currentBig3Count = tasks.filter(t => t.important && !t.completed).length
+    const currentBig3Count = tasks.filter(t => t.section === 'big_three' && t.page === 'daily').length
     
-    if (!task.important && currentBig3Count >= 3) {
+    if (task.section !== 'big_three' && currentBig3Count >= 3) {
       return { error: 'Ya tienes 3 tareas Big 3. Completa una antes de añadir otra.' }
     }
 
-    return await updateTask(taskId, { important: !task.important })
+    const newSection = task.section === 'big_three' ? 'otras_tareas' : 'big_three'
+    return await updateTask(taskId, { section: newSection })
   }
 
-  // Toggle waiting status (inbox <-> pending)
+  // Toggle waiting status
   const toggleWaitingStatus = async (taskId) => {
     const task = tasks.find(t => t.id === taskId)
     if (!task) return { error: 'Tarea no encontrada' }
 
-    const newStatus = task.status === 'pending' ? 'inbox' : 'pending'
+    const newSection = task.section === 'en_espera' ? 'otras_tareas' : 'en_espera'
     
-    // Optimistic update - similar a toggleBig3
+    // Optimistic update
     setTasks(prev => prev.map(t => 
-      t.id === taskId ? { ...t, status: newStatus } : t
+      t.id === taskId ? { ...t, section: newSection } : t
     ))
     
     try {
-      const result = await updateTask(taskId, { status: newStatus })
+      const result = await updateTask(taskId, { section: newSection })
       
       if (result.error) {
         // Revertir si hay error
         setTasks(prev => prev.map(t => 
-          t.id === taskId ? { ...t, status: task.status } : t
+          t.id === taskId ? { ...t, section: task.section } : t
         ))
       }
       
@@ -369,7 +396,7 @@ export const useTasks = () => {
       console.error('Error en toggleWaitingStatus:', error)
       // Revertir cambio
       setTasks(prev => prev.map(t => 
-        t.id === taskId ? { ...t, status: task.status } : t
+        t.id === taskId ? { ...t, section: task.section } : t
       ))
       return { error: error.message }
     }
@@ -765,38 +792,47 @@ export const useTasks = () => {
     }
   }
 
-  // Toggle urgent priority
+  // Toggle urgent
   const toggleUrgent = async (taskId) => {
     const task = tasks.find(t => t.id === taskId)
     if (!task) return { error: 'Tarea no encontrada' }
 
-    const newPriority = task.priority === 'urgent' ? 'normal' : 'urgent'
+    const newSection = task.section === 'urgent' ? 'otras_tareas' : 'urgent'
     
-    return await updateTask(taskId, { priority: newPriority })
+    return await updateTask(taskId, { section: newSection })
   }
 
-  // Computed values - FILTROS CON PRECEDENCIA
-  const completedTasks = tasks.filter(task => task.completed)
-  
-  // PRECEDENCIA: Urgente > Big 3 > En Espera > Normal
+  // 🎯 FILTROS ULTRA SIMPLES - SOLO page/section
   const urgentTasks = tasks.filter(task => 
-    task.priority === 'urgent' && !task.completed
+    task.page === 'daily' && task.section === 'urgent'
   )
   
-  
   const importantTasks = tasks.filter(task => 
-    task.important && !task.completed && task.priority !== 'urgent'
+    task.page === 'daily' && task.section === 'big_three'
   )
   
   const waitingTasks = tasks.filter(task => 
-    task.status === 'pending' && !task.completed && 
-    task.priority !== 'urgent' && !task.important
+    task.page === 'daily' && task.section === 'en_espera'
   )
   
   const routineTasks = tasks.filter(task => 
-    !task.important && !task.completed && 
-    task.status !== 'pending' && task.priority !== 'urgent'
+    task.page === 'daily' && task.section === 'otras_tareas'
   )
+  
+  const completedTasks = tasks.filter(task => 
+    task.page === 'daily' && task.section === 'completadas'
+  )
+
+  // 🚨 DEBUG TEMPORAL - FILTROS
+  console.log('=== DEBUG FILTERS ===')
+  console.log('Total tasks:', tasks.length)
+  console.log('Sample task:', tasks[0])
+  console.log('Urgent filter result:', urgentTasks.length)
+  console.log('Important filter result:', importantTasks.length)
+  console.log('Waiting filter result:', waitingTasks.length)
+  console.log('Routine filter result:', routineTasks.length)
+  console.log('Completed filter result:', completedTasks.length)
+  console.log('===================')
   
   const big3Count = importantTasks.length
 

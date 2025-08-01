@@ -5,6 +5,7 @@ import AttachmentItem from '../attachments/AttachmentItem'
 import { useGestures } from '@/hooks/useGestures'
 import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { TASK_SECTIONS, getSectionColorClasses } from '../../config/taskSections'
+import { SECTION_ICON_MAP } from '@/utils/sectionIcons'
 import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, Inbox, MapPin, FileText, User, Trash2, Flame, Target } from 'lucide-react'
 
 const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onToggleUrgent, onAddAttachment, onDeleteAttachment, onReloadAttachments, subtasksCount = 0, getSubtasks, loadSubtasks, onToggleTaskComplete, addSubtask, deleteSubtask }) => {
@@ -53,58 +54,59 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     }
   }
 
-  // Función para determinar qué sección está activa actualmente - PRECEDENCIA MEJORADA
+  // Función para determinar qué sección está activa actualmente - USAR SISTEMA section/page
   const getCurrentSection = () => {
-    // Si está completada (máxima precedencia)
-    if (task.completed) return 'completed'
+    // Usar el campo 'section' directamente de la BD
+    if (task.section === 'completadas') return 'completadas'
+    if (task.section === 'urgent') return 'urgent'
+    if (task.section === 'big_three') return 'big_three'
+    if (task.section === 'en_espera') return 'en_espera'
+    if (task.section === 'otras_tareas') return 'normal'
     
-    // ✅ CUSTOM SECTIONS - VERIFICAR section_id PRIMERO
-    if (task.section_id && task.section_id.startsWith('custom_')) {
-      return task.section_id
-    }
-    
-    // PRECEDENCIA DEFAULT: Urgente > Big 3 > En Espera > Normal
-    if (task.priority === 'urgent') {
-      // Buscar sección urgente custom
-      const urgentSection = visibleSections.find(s => s.name === 'Urgente' && s.isCustom)
-      return urgentSection ? urgentSection.id : 'urgent'
-    }
-    
-    if (task.is_big_3_today || task.important) return 'big3'
-    if (task.status === 'pending') return 'waiting'
+    // Fallback por compatibilidad
+    if (task.completed) return 'completadas'
+    if (task.priority === 'urgent') return 'urgent'
+    if (task.is_big_3_today || task.important) return 'big_three'
+    if (task.status === 'pending') return 'en_espera'
     
     return 'normal'
   }
 
-  // Función para renderizar iconos con colores
-  const renderTaskSectionIcon = (iconName, sectionId, size = 20) => {
-    const getIconColor = (id) => {
-      switch(id) {
-        case 'big3': return 'text-yellow-500'
-        case 'normal': return 'text-blue-500'
-        case 'waiting': return 'text-orange-500'
-        case 'urgent': return 'text-red-500'
-        case 'completed': return 'text-green-500'
-        default: return 'text-gray-500'
-      }
+  // Función para renderizar iconos de sección con configuración
+  const renderTaskSectionIcon = (sectionId, size = 20) => {
+    // Mapear IDs de UI a nombres de iconos
+    const sectionIconMapping = {
+      'big_three': 'star',
+      'en_espera': 'clock',
+      'normal': 'folder',
+      'completadas': 'check-circle',
+      'urgent': 'flame',
+      'otras_tareas': 'folder'
     }
     
-    const iconColor = getIconColor(sectionId)
+    const iconName = sectionIconMapping[sectionId] || 'folder'
+    const iconData = SECTION_ICON_MAP[iconName]
     
-    const icons = {
-      Star: <Star size={size} className={iconColor} />,
-      FileText: <FileText size={size} className={iconColor} />,
-      Clock: <Clock size={size} className={iconColor} />,
-      Flame: <Flame size={size} className={iconColor} />,
-      CheckCircle: <CheckCircle size={size} className={iconColor} />
+    if (!iconData) {
+      const fallbackIcon = SECTION_ICON_MAP['folder']
+      const IconComponent = fallbackIcon.icon
+      return <IconComponent size={size} className={fallbackIcon.color} />
     }
-    return icons[iconName] || <FileText size={size} className={iconColor} />
+    
+    const IconComponent = iconData.icon
+    return <IconComponent size={size} className={iconData.color} />
   }
 
   // ✅ SECCIONES DINÁMICAS: DEFAULT + CUSTOM
   const SECTION_OPTIONS = [
     {
-      id: 'big3',
+      id: 'urgent',
+      name: 'Urgente',
+      icon: 'Flame',
+      description: 'Requiere atención inmediata'
+    },
+    {
+      id: 'big_three',
       name: 'Big 3',
       icon: 'Star',
       description: 'Tareas más importantes del día'
@@ -116,7 +118,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
       description: 'Tareas regulares del día'
     },
     {
-      id: 'waiting',
+      id: 'en_espera',
       name: 'En Espera',
       icon: 'Clock',
       description: 'Esperando respuesta externa'
@@ -129,7 +131,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
       description: 'Sección personalizada'
     })),
     {
-      id: 'completed',
+      id: 'completadas',
       name: 'Completar',
       icon: 'CheckCircle',
       description: 'Marcar como terminada'
@@ -146,63 +148,33 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     }
 
     try {
-      // STEP 1: Limpiar TODOS los flags de sección actual
-      if (currentSection.startsWith('custom_')) {
-        // ✅ LIMPIAR CUSTOM SECTION
-        await onUpdate(task.id, { section_id: null })
-      } else {
-        switch(currentSection) {
-          case 'big3':
-            if (task.important || task.is_big_3_today) {
-              await onToggleImportant(task.id)
-            }
-            break
-          case 'waiting':
-            if (task.status === 'pending') {
-              await onToggleWaitingStatus(task.id)
-            }
-            break
-          case 'urgent':
-            if (task.priority === 'urgent' && onToggleUrgent) {
-              await onToggleUrgent(task.id)
-            }
-            break
-        }
-      }
+      // STEP 1: No necesario limpiar - las funciones toggle manejan el cambio directo
 
-      // STEP 2: Aplicar la nueva sección
-      if (newSectionId.startsWith('custom_')) {
-        // ✅ ASIGNAR A CUSTOM SECTION
-        await onUpdate(task.id, { section_id: newSectionId })
-      } else {
-        switch(newSectionId) {
-          case 'completed':
-            await onToggleComplete(task.id)
-            onBack() // Cerrar modal después de completar
-            break
-            
-          case 'big3':
-            if (!task.important && !task.is_big_3_today) {
-              await onToggleImportant(task.id)
-            }
-            break
-            
-          case 'waiting':
-            if (task.status !== 'pending') {
-              await onToggleWaitingStatus(task.id)
-            }
-            break
-            
-          case 'urgent':
-            if (task.priority !== 'urgent' && onToggleUrgent) {
-              await onToggleUrgent(task.id)
-            }
-            break
-            
-          case 'normal':
-            // Ya limpiado en STEP 1, no hacer nada más
-            break
-        }
+      // STEP 2: Aplicar la nueva sección usando las funciones toggle
+      switch(newSectionId) {
+        case 'completadas':
+          await onToggleComplete(task.id)
+          onBack() // Cerrar modal después de completar
+          break
+          
+        case 'big_three':
+          await onToggleImportant(task.id)
+          break
+          
+        case 'en_espera':
+          await onToggleWaitingStatus(task.id)
+          break
+          
+        case 'urgent':
+          if (onToggleUrgent) {
+            await onToggleUrgent(task.id)
+          }
+          break
+          
+        case 'normal':
+          // Mover a otras_tareas usando updateTask directamente
+          await onUpdate(task.id, { section: 'otras_tareas' })
+          break
       }
       
       // Forzar re-render para mostrar cambio
@@ -229,6 +201,19 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             {SECTION_OPTIONS.map(section => {
               const isActive = currentSection === section.id
               
+              // Mapear IDs para obtener configuración de colores
+              const sectionIconMapping = {
+                'big_three': 'star',
+                'en_espera': 'clock',
+                'normal': 'folder',
+                'completadas': 'check-circle',
+                'urgent': 'flame',
+                'otras_tareas': 'folder'
+              }
+              
+              const iconName = sectionIconMapping[section.id] || 'folder'
+              const sectionConfig = SECTION_ICON_MAP[iconName] || SECTION_ICON_MAP['folder']
+              
               return (
                 <button
                   key={section.id}
@@ -240,7 +225,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                   }`}
                 >
                   <div className="flex flex-col items-center gap-2">
-                    {renderTaskSectionIcon(section.icon, section.id)}
+                    {renderTaskSectionIcon(section.id)}
                     <span className="text-xs font-medium">{section.name}</span>
                   </div>
                 </button>

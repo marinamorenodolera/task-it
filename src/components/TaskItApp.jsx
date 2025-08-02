@@ -124,11 +124,6 @@ const TaskItApp = () => {
     visibleSections
   } = useUserPreferences()
   
-  // 🚨 DEBUG TEMPORAL - visibleSections
-  console.log('🔍 VISIBLE SECTIONS DEBUG:')
-  console.log('visibleSections:', visibleSections)
-  console.log('visibleSections IDs:', visibleSections.map(s => s.id))
-  console.log('========================')
 
   // Función helper para renderizar iconos de sección con colores correctos
   const renderSectionIconLocal = (sectionId, size = 20) => {
@@ -158,38 +153,23 @@ const TaskItApp = () => {
 
   // FUNCIÓN PARA OBTENER TAREAS DE CADA SECCIÓN
   const getSectionTasks = (sectionId) => {
-    console.log('=== DEBUG getSectionTasks ===')
-    console.log('sectionId:', sectionId)
-    console.log('urgentTasks length:', urgentTasks.length)
-    console.log('importantTasks length:', importantTasks.length)
-    console.log('waitingTasks length:', waitingTasks.length)
-    console.log('routineTasks length:', routineTasks.length)
-    console.log('completedTasks length:', completedTasks.length)
     
     switch(sectionId) {
       case 'big_three':
-        console.log('Returning importantTasks:', importantTasks.length)
         return importantTasks || []
       case 'urgent':
-        console.log('Returning urgentTasks:', urgentTasks.length)
         return urgentTasks || []
       case 'en_espera':  
-        console.log('Returning waitingTasks:', waitingTasks.length)
         return waitingTasks || []
       case 'otras_tareas':
-        console.log('Returning routineTasks:', routineTasks.length)
         return routineTasks || []
       case 'completadas':
-        console.log('Returning completedTasks:', completedTasks.length)
         return completedTasks || []
       case 'rituals':
-        console.log('Returning rituals: 0 (TODO)')
         return [] // TODO: Implementar rituals tasks filter
       case 'activities':
-        console.log('Returning activities: 0 (TODO)')
         return [] // TODO: Implementar activities tasks filter
       default:
-        console.log('Default case for:', sectionId)
         // ✅ MANEJAR SECCIONES CUSTOM (DESHABILITADO - section_id no existe en tabla)
         if (sectionId.startsWith('custom_')) {
           return [] // Por ahora retornamos array vacío hasta que se implemente section_id

@@ -29,7 +29,6 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
   // Función handler unificada para toggles de sección
   const handleSectionToggle = async (toggleFunction, taskId) => {
-    console.log('🔄 Section toggle:', toggleFunction, 'for task:', taskId)
     try {
       if (toggleFunction === 'deleteTask') {
         if (window.confirm('¿Estás seguro de eliminar esta tarea?')) {
@@ -47,7 +46,6 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
       } else if (toggleFunction === 'toggleUrgent') {
         await onToggleUrgent(taskId)
       }
-      console.log('✅ Section toggle executed successfully')
     } catch (error) {
       console.error('❌ Error in section toggle:', error)
       alert('Error al cambiar la sección. Inténtalo de nuevo.')
@@ -143,7 +141,6 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     const currentSection = getCurrentSection()
     
     if (currentSection === newSectionId) {
-      console.log('Ya está en esta sección')
       return
     }
 
@@ -318,7 +315,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     if (task.id && onReloadAttachments) {
       onReloadAttachments(task.id)
     }
-  }, [task.id, onReloadAttachments])
+  }, [task.id])
 
   // Cargar subtareas cuando se monta el componente
   useEffect(() => {
@@ -330,7 +327,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         setSubtasksLoaded(true) // Still mark as loaded to avoid infinite loading
       })
     }
-  }, [task?.id, loadSubtasks])
+  }, [task?.id])
 
   // Scroll to top SOLO al entrar a task detail (no al volver)
   useEffect(() => {
@@ -444,10 +441,6 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             <div className="flex gap-2">
               <BaseButton
                 onClick={async () => {
-                  console.log('📅 AÑADIR FECHA LÍMITE - DEBUG')
-                  console.log('- task.id:', task.id)
-                  console.log('- attachmentData.deadline:', attachmentData.deadline)
-                  console.log('- editedTask antes:', editedTask)
                   
                   try {
                     const updatedTask = {
@@ -455,12 +448,10 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                       deadline: new Date(attachmentData.deadline), // Para UI
                       due_date: attachmentData.deadline // Para DB (legacy)
                     }
-                    console.log('- updatedTask después:', updatedTask)
                     
                     const result = await onUpdate(task.id, updatedTask)
                     
                     if (!result || !result.error) {
-                      console.log('✅ Fecha límite añadida exitosamente')
                       // Actualizar estado local para UI inmediata
                       setEditedTask(prev => ({
                         ...prev,
@@ -1288,19 +1279,13 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          console.log('🗑️ CLICK ELIMINAR SUBTAREA - INICIO')
-                          console.log('- Subtarea a eliminar:', subtask)
-                          console.log('- ID de subtarea:', subtask.id)
-                          console.log('- Total subtareas antes:', getSubtasks(task.id).length)
                           
                           try {
                             deleteSubtask(subtask.id)
-                            console.log('✅ deleteSubtask() ejecutada correctamente')
                           } catch (error) {
                             console.error('❌ Error al ejecutar deleteSubtask:', error)
                           }
                           
-                          console.log('🗑️ CLICK ELIMINAR SUBTAREA - FIN')
                         }}
                         className="text-red-400 hover:text-red-600 transition-colors p-1"
                         title="Eliminar subtarea"

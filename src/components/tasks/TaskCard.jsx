@@ -103,11 +103,9 @@ const TaskCard = ({
           onPointerDown={(e) => {
             e.stopPropagation()
             e.preventDefault()
-            console.log('🔄 TaskCard Toggle Complete clicked for task:', task.id, 'Current state:', task.completed)
             setCheckboxPressed(true)
             try {
               onComplete(task.id)
-              console.log('✅ TaskCard Toggle Complete executed successfully')
             } catch (error) {
               console.error('❌ Error in TaskCard Toggle Complete:', error)
             }
@@ -119,7 +117,6 @@ const TaskCard = ({
           }}
           onTouchStart={(e) => {
             e.stopPropagation()
-            console.log('🔄 TaskCard Touch Start for task:', task.id, 'Current state:', task.completed)
             setCheckboxPressed(true)
             setTimeout(() => setCheckboxPressed(false), 100)
           }}

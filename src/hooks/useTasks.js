@@ -38,12 +38,6 @@ export const useTasks = () => {
 
       if (error) throw error
 
-      // 🚨 DEBUG TEMPORAL - QUERY RESULT
-      console.log('🔍 LOADTASKS DEBUG:')
-      console.log('- User ID:', user.id)
-      console.log('- Raw data from Supabase:', data?.length, 'tasks')
-      console.log('- Sample raw task:', data?.[0])
-      console.log('========================')
 
       // Map database fields to component expected format and load attachments
       const mappedTasks = await Promise.all(
@@ -89,12 +83,6 @@ export const useTasks = () => {
         })
       )
 
-      // 🚨 DEBUG TEMPORAL - MAPPED TASKS
-      console.log('🗂️ MAPPED TASKS DEBUG:')
-      console.log('- Mapped tasks length:', mappedTasks.length)
-      console.log('- Sample mapped task:', mappedTasks[0])
-      console.log('- Sample page/section:', mappedTasks[0]?.page, '/', mappedTasks[0]?.section)
-      console.log('========================')
 
       setTasks(mappedTasks)
       setError(null)
@@ -196,10 +184,6 @@ export const useTasks = () => {
   const updateTask = async (taskId, updates) => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
 
-    console.log('🔄 updateTask DEBUG - INICIO')
-    console.log('- taskId:', taskId)
-    console.log('- updates object:', updates)
-    console.log('- updates.title:', updates?.title)
 
     try {
       // Map component format to database format
@@ -301,7 +285,8 @@ export const useTasks = () => {
     try {
       // 2. Actualizar en base de datos - SOLO section
       const result = await updateTask(taskId, { 
-        section: newSection 
+        section: newSection,
+        completed: newCompletedState
       })
       
       if (result.error) {
@@ -506,12 +491,9 @@ export const useTasks = () => {
   }
 
   const deleteSubtask = async (subtaskId) => {
-    console.log('🔄 deleteSubtask HOOK - INICIO')
-    console.log('- subtaskId recibido:', subtaskId)
     
     try {
       const result = await deleteTask(subtaskId)
-      console.log('✅ deleteTask resultado:', result)
       return result
     } catch (error) {
       console.error('❌ Error en deleteSubtask hook:', error)
@@ -823,16 +805,6 @@ export const useTasks = () => {
     task.page === 'daily' && task.section === 'completadas'
   )
 
-  // 🚨 DEBUG TEMPORAL - FILTROS
-  console.log('=== DEBUG FILTERS ===')
-  console.log('Total tasks:', tasks.length)
-  console.log('Sample task:', tasks[0])
-  console.log('Urgent filter result:', urgentTasks.length)
-  console.log('Important filter result:', importantTasks.length)
-  console.log('Waiting filter result:', waitingTasks.length)
-  console.log('Routine filter result:', routineTasks.length)
-  console.log('Completed filter result:', completedTasks.length)
-  console.log('===================')
   
   const big3Count = importantTasks.length
 

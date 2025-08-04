@@ -18,6 +18,9 @@ const SortableTaskCard = (props) => {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.6 : 1,
+    // ✅ MOBILE TOUCH OPTIMIZATION
+    touchAction: 'none',
+    userSelect: 'none',
   }
 
   return (

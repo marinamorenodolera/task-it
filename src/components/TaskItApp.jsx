@@ -528,13 +528,13 @@ const TaskItApp = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 3, // Reducido para mejor respuesta en desktop
+        distance: 8, // Más tolerancia para mobile
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 250, // Evita conflicto con scroll en mobile
-        tolerance: 5, // Permite pequeños movimientos antes de activar drag
+        delay: 250,
+        tolerance: 5,
       },
     }),
     useSensor(KeyboardSensor, {

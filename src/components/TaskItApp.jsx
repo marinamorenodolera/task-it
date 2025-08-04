@@ -51,6 +51,7 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragOverlay,
@@ -91,6 +92,7 @@ const TaskItApp = () => {
     addSubtask,
     deleteSubtask,
     updateTaskOrder,
+    moveTaskBetweenSections,
     loadTasks
   } = useTasks()
   
@@ -268,6 +270,85 @@ const TaskItApp = () => {
       )
     }
 
+    // Caso especial para actividades
+    if (section.id === 'activities') {
+      return (
+        <div key={section.id}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              {renderSectionIconLocal('activities')}
+              {section.name} ({todayActivities?.length || 0})
+            </h2>
+            <button
+              onClick={() => setShowActivityForm(true)}
+              className="px-3 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              + Añadir
+            </button>
+          </div>
+          
+          <div className="space-y-2">
+            {todayActivities && todayActivities.length > 0 ? (
+              todayActivities.map((activity) => (
+                <div
+                  key={activity.id}
+                  className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">
+                        {activity.type}
+                      </span>
+                      <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
+                        {activity.duration} min
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {activity.time}
+                      </span>
+                    </div>
+                    {activity.notes && (
+                      <p className="text-xs text-gray-600 mt-1">{activity.notes}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => deleteActivity(activity.id)}
+                    className="text-red-400 hover:text-red-600 transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">
+                No hay actividades registradas hoy
+              </p>
+            )}
+          </div>
+
+          {/* Quick activity buttons */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {predefinedActivities?.slice(0, 4).map((activity) => (
+              <button
+                key={activity.id}
+                onClick={() => {
+                  addActivity({
+                    type: activity.type,
+                    duration: activity.duration,
+                    notes: activity.notes || '',
+                    date: new Date().toISOString().split('T')[0],
+                    time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+                  })
+                }}
+                className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                {activity.type} {activity.duration}min
+              </button>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
     // Caso especial para tareas completadas
     if (section.id === 'completadas') {
       const allCompletedItems = [
@@ -292,8 +373,8 @@ const TaskItApp = () => {
           
           {showCompletedTasks && (
             <div className="space-y-2">
-              {allCompletedItems.map((item) => (
-                <div key={`${item.id}-${item.type || 'task'}`} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all cursor-pointer"
+              {allCompletedItems.map((item, index) => (
+                <div key={`completed-${item.id}-${index}`} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all cursor-pointer"
                   onClick={() => {
                     if (item.type === 'task' || !item.type) {
                       toggleTaskComplete(item.id)
@@ -365,18 +446,25 @@ const TaskItApp = () => {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           modifiers={[restrictToVerticalAxis]}
+          accessibility={{
+            screenReaderInstructions: {
+              draggable: 'Para reordenar, mantén presionado y arrastra'
+            }
+          }}
         >
           <SortableContext 
-            items={sectionTasks.map(task => task.id)}
+            items={sectionTasks.map(task => `${section.id}-${task.id}`)}
             strategy={verticalListSortingStrategy}
           >
             <div className="space-y-2">
               {sectionTasks.map((task) => (
                 <SortableTaskCard
-                  key={task.id}
+                  key={`${section.id}-${task.id}`}
                   task={task}
+                  sectionId={section.id}
                   onClick={() => handleTaskClick(task)}
                   onComplete={toggleTaskComplete}
+                  onMoveBetweenSections={moveTaskBetweenSections}
                   getSubtasks={getSubtasks}
                   expandedTasks={expandedTasks}
                   onToggleExpanded={onToggleExpanded}
@@ -441,6 +529,12 @@ const TaskItApp = () => {
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 3, // Reducido para mejor respuesta en desktop
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250, // Evita conflicto con scroll en mobile
+        tolerance: 5, // Permite pequeños movimientos antes de activar drag
       },
     }),
     useSensor(KeyboardSensor, {
@@ -717,9 +811,24 @@ const TaskItApp = () => {
     const { active } = event
     setActiveId(active.id)
     
+    // Extraer el taskId real del ID compuesto (section-taskId)
+    const taskId = active.id.split('-').slice(1).join('-') // En caso de que el taskId tenga guiones
+    
     // Encontrar la tarea que se está arrastrando
-    const task = [...importantTasks, ...waitingTasks, ...routineTasks].find(t => t.id === active.id)
+    const task = [...importantTasks, ...waitingTasks, ...routineTasks, ...urgentTasks].find(t => t.id === taskId)
     setDraggedTask(task)
+  }
+
+  // Helper function to map section IDs to database values
+  const getSectionDbValue = (sectionId) => {
+    const sectionMapping = {
+      'big_three': 'big_three',
+      'urgent': 'urgent', 
+      'en_espera': 'en_espera',
+      'otras_tareas': 'otras_tareas',
+      'completadas': 'completadas'
+    }
+    return sectionMapping[sectionId] || sectionId
   }
 
   const handleDragEnd = (event) => {
@@ -732,23 +841,45 @@ const TaskItApp = () => {
       return
     }
 
+    // Extraer sectionId y taskId de los IDs compuestos (formato: "sectionId-taskId")
+    const [activeSectionId, ...activeTaskIdParts] = active.id.split('-')
+    const [overSectionId, ...overTaskIdParts] = over.id.split('-') 
+    const activeTaskId = activeTaskIdParts.join('-')
+    const overTaskId = overTaskIdParts.join('-')
+
+    // ✅ DETECTAR MOVIMIENTO ENTRE SECCIONES
+    if (activeSectionId !== overSectionId) {
+      // Mapear sectionIds a valores de base de datos
+      const sourceSection = getSectionDbValue(activeSectionId)
+      const targetSection = getSectionDbValue(overSectionId)
+      
+      // Llamar función de movimiento entre secciones
+      moveTaskBetweenSections(activeTaskId, sourceSection, targetSection, overTaskId)
+      return
+    }
+
+    // ✅ MOVIMIENTO DENTRO DE LA MISMA SECCIÓN (lógica original)
+
     // Determinar qué sección contiene la tarea
     let sectionTasks = []
     let sectionName = ''
     
-    if (importantTasks.find(t => t.id === active.id)) {
+    if (importantTasks.find(t => t.id === activeTaskId)) {
       sectionTasks = importantTasks
       sectionName = 'important'
-    } else if (waitingTasks.find(t => t.id === active.id)) {
+    } else if (waitingTasks.find(t => t.id === activeTaskId)) {
       sectionTasks = waitingTasks  
       sectionName = 'waiting'
-    } else if (routineTasks.find(t => t.id === active.id)) {
+    } else if (routineTasks.find(t => t.id === activeTaskId)) {
       sectionTasks = routineTasks
       sectionName = 'routine'
+    } else if (urgentTasks.find(t => t.id === activeTaskId)) {
+      sectionTasks = urgentTasks
+      sectionName = 'urgent'
     }
     
-    const oldIndex = sectionTasks.findIndex(task => task.id === active.id)
-    const newIndex = sectionTasks.findIndex(task => task.id === over.id)
+    const oldIndex = sectionTasks.findIndex(task => task.id === activeTaskId)
+    const newIndex = sectionTasks.findIndex(task => task.id === overTaskId)
 
     if (oldIndex === -1 || newIndex === -1) {
       return
@@ -766,10 +897,11 @@ const TaskItApp = () => {
     // Actualizar estado inmediatamente sin recargar desde BD
     // Filtrar tareas de otras secciones y mantenerlas
     const otherTasks = tasks.filter(task => {
-      // Excluir tareas de la sección actual
-      if (sectionName === 'routine' && !task.important && !task.completed && task.status !== 'pending') return false
-      if (sectionName === 'important' && task.important && !task.completed) return false  
-      if (sectionName === 'waiting' && task.status === 'pending' && !task.completed) return false
+      // Excluir tareas de la sección actual que estamos reordenando
+      if (sectionName === 'routine' && task.section === 'otras_tareas') return false
+      if (sectionName === 'important' && task.section === 'big_three') return false  
+      if (sectionName === 'waiting' && task.section === 'en_espera') return false
+      if (sectionName === 'urgent' && task.section === 'urgent') return false
       return true
     })
     
@@ -1217,6 +1349,107 @@ const TaskItApp = () => {
           isOpen={showRitualsConfig}
           onClose={() => setShowRitualsConfig(false)}
         />
+      )}
+
+      {/* Activity Form Modal */}
+      {showActivityForm && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4"
+          onClick={() => setShowActivityForm(false)}
+        >
+          <div 
+            className="bg-white rounded-xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Añadir Actividad</h2>
+              <button
+                onClick={() => setShowActivityForm(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Predefined activity buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                {predefinedActivities?.map((activity) => (
+                  <button
+                    key={activity.id}
+                    onClick={() => {
+                      setNewActivity({
+                        type: activity.type,
+                        duration: activity.duration.toString(),
+                        notes: activity.notes || '',
+                        date: new Date().toISOString().split('T')[0],
+                        time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+                      })
+                    }}
+                    className="p-3 text-sm bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors border border-purple-200"
+                  >
+                    <div className="font-medium">{activity.type}</div>
+                    <div className="text-xs opacity-75">{activity.duration} min</div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="border-t pt-4">
+                <input
+                  type="text"
+                  placeholder="Tipo de actividad"
+                  value={newActivity.type}
+                  onChange={(e) => setNewActivity({...newActivity, type: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+
+                <div className="flex gap-2 mt-3">
+                  <input
+                    type="number"
+                    placeholder="Duración (min)"
+                    value={newActivity.duration}
+                    onChange={(e) => setNewActivity({...newActivity, duration: e.target.value})}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  <input
+                    type="time"
+                    value={newActivity.time}
+                    onChange={(e) => setNewActivity({...newActivity, time: e.target.value})}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <textarea
+                  placeholder="Notas (opcional)"
+                  value={newActivity.notes}
+                  onChange={(e) => setNewActivity({...newActivity, notes: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 mt-3"
+                  rows="2"
+                />
+
+                <button
+                  onClick={() => {
+                    if (newActivity.type && newActivity.duration) {
+                      addActivity(newActivity)
+                      setNewActivity({
+                        type: '',
+                        notes: '',
+                        duration: '',
+                        date: new Date().toISOString().split('T')[0],
+                        time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+                      })
+                      setShowActivityForm(false)
+                    }
+                  }}
+                  disabled={!newActivity.type || !newActivity.duration}
+                  className="w-full mt-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Añadir Actividad
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Task Detail Modal */}

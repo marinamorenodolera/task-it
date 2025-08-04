@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities'
 import TaskCard from './TaskCard'
 
 const SortableTaskCard = (props) => {
+  const sortableId = `${props.sectionId}-${props.task.id}`
   const {
     attributes,
     listeners,
@@ -11,7 +12,7 @@ const SortableTaskCard = (props) => {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: props.task.id })
+  } = useSortable({ id: sortableId })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -30,6 +31,8 @@ const SortableTaskCard = (props) => {
     >
       <TaskCard
         {...props}
+        sectionId={props.sectionId}
+        onMoveBetweenSections={props.onMoveBetweenSections}
         dragAttributes={attributes}
         dragListeners={listeners}
         isDragging={isDragging}

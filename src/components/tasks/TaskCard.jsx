@@ -5,11 +5,13 @@ import { useGestures } from '@/hooks/useGestures'
 
 const TaskCard = ({ 
   task, 
+  sectionId,
   onClick, 
   onComplete, 
   onEdit, 
   onToggleImportant, 
   onReorder, 
+  onMoveBetweenSections,
   getSubtasks, 
   onToggleTaskComplete, 
   expandedTasks = [], 
@@ -81,6 +83,60 @@ const TaskCard = ({
     }
   }
 
+  // HTML5 Drag and Drop handlers - DESHABILITADOS (CONFLICTO CON @DND-KIT)
+  // const handleDragStart = (e) => {
+  //   const dragData = {
+  //     taskId: task.id,
+  //     sourceSection: sectionId
+  //   }
+  //   console.log('🚀 DRAG START:', dragData)
+  //   e.dataTransfer.setData('text/plain', JSON.stringify(dragData))
+  //   e.dataTransfer.effectAllowed = 'move'
+  //   setIsBeingReordered(true)
+  // }
+
+  // const handleDragEnd = (e) => {
+  //   setIsBeingReordered(false)
+  // }
+
+  // const handleDragOver = (e) => {
+  //   e.preventDefault()
+  //   console.log('🔄 DRAG OVER DETECTADO')
+  //   e.dataTransfer.dropEffect = 'move'
+  // }
+
+  // const handleDragLeave = (e) => {
+  //   // Optional: visual feedback when drag leaves
+  // }
+
+  // const handleDrop = (e) => {
+  //   e.preventDefault()
+  //   console.log('🔄 DROP DETECTADO')
+  //   
+  //   const dragData = JSON.parse(e.dataTransfer.getData('text/plain'))
+  //   const { taskId: draggedTaskId, sourceSection } = dragData
+  //   console.log('📊 Drag data:', { draggedTaskId, sourceSection, targetSection: sectionId })
+  //   
+  //   if (draggedTaskId !== task.id) {
+  //     if (sourceSection === sectionId && onReorder) {
+  //       console.log('🔄 REORDENAR EN MISMA SECCIÓN')
+  //       onReorder(draggedTaskId, task.id, sectionId)
+  //     } 
+  //     else if (sourceSection !== sectionId && onMoveBetweenSections) {
+  //       console.log('🔄 MOVER ENTRE SECCIONES')
+  //       onMoveBetweenSections(draggedTaskId, sourceSection, sectionId, task.id)
+  //     } else {
+  //       console.log('❌ NO SE EJECUTÓ NINGUNA ACCIÓN')
+  //       console.log('Debug info:', { 
+  //         sourceSection, 
+  //         sectionId, 
+  //         onReorder: !!onReorder, 
+  //         onMoveBetweenSections: !!onMoveBetweenSections 
+  //       })
+  //     }
+  //   }
+  // }
+
   return (
     <div>
       <div
@@ -96,6 +152,12 @@ const TaskCard = ({
             : 'cursor-grab hover:shadow-md hover:scale-[1.02] hover:border-gray-300'
         }`}
         onClick={handleCardClick}
+        // draggable={true}
+        // onDragStart={handleDragStart}
+        // onDragEnd={handleDragEnd}
+        // onDragOver={handleDragOver}
+        // onDragLeave={handleDragLeave}
+        // onDrop={handleDrop}
         {...dragAttributes}
         {...dragListeners}
       >

@@ -84,7 +84,12 @@ export const useTasks = () => {
       )
 
 
-      setTasks(mappedTasks)
+      // ✅ DEDUPLICACIÓN PARA PREVENIR DUPLICADOS EN ARRAY BASE
+      const uniqueTasks = mappedTasks.filter((task, index, arr) => 
+        arr.findIndex(t => t.id === task.id) === index
+      )
+      
+      setTasks(uniqueTasks)
       setError(null)
       
       // Cargar subtareas para todas las tareas principales - temporalmente deshabilitado por error
@@ -521,6 +526,50 @@ export const useTasks = () => {
     }
   }
 
+  const moveTaskBetweenSections = async (taskId, sourceSection, targetSection, targetTaskId = null) => {
+    try {
+      // 1. Obtener la tarea a mover
+      const taskToMove = tasks.find(t => t.id === taskId)
+      if (!taskToMove) return { error: 'Tarea no encontrada' }
+      
+      // 2. Calcular nuevo section_order en la sección destino
+      const targetSectionTasks = tasks.filter(t => t.section === targetSection && !t.completed)
+      let newOrder = targetSectionTasks.length // Por defecto al final
+      
+      // Si hay targetTaskId, calcular posición específica
+      if (targetTaskId) {
+        const targetTask = targetSectionTasks.find(t => t.id === targetTaskId)
+        if (targetTask) {
+          newOrder = targetTask.section_order
+        }
+      }
+      
+      // 3. Actualizar en Supabase
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          section: targetSection,
+          section_order: newOrder,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', taskId)
+        .eq('user_id', user.id)
+      
+      if (error) {
+        console.error('Error moviendo tarea:', error)
+        return { error: error.message }
+      }
+      
+      // 4. Refrescar tareas
+      await loadTasks()
+      return { success: true }
+      
+    } catch (error) {
+      console.error('Error inesperado:', error)
+      return { error: error.message }
+    }
+  }
+
   // 🆕 BULK OPERATIONS
   const bulkUpdateStatus = async (taskIds, newStatus) => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
@@ -785,25 +834,27 @@ export const useTasks = () => {
   }
 
   // 🎯 FILTROS ULTRA SIMPLES - SOLO page/section
-  const urgentTasks = tasks.filter(task => 
-    task.page === 'daily' && task.section === 'urgent'
-  )
+  const urgentTasks = tasks
+    .filter(task => task.page === 'daily' && task.section === 'urgent')
+    .filter((task, index, arr) => arr.findIndex(t => t.id === task.id) === index)
   
-  const importantTasks = tasks.filter(task => 
-    task.page === 'daily' && task.section === 'big_three'
-  )
   
-  const waitingTasks = tasks.filter(task => 
-    task.page === 'daily' && task.section === 'en_espera'
-  )
+  // ✅ FILTROS CON DEDUPLICACIÓN PARA PREVENIR KEYS DUPLICADAS
+  const importantTasks = tasks
+    .filter(task => task.page === 'daily' && task.section === 'big_three')
+    .filter((task, index, arr) => arr.findIndex(t => t.id === task.id) === index)
   
-  const routineTasks = tasks.filter(task => 
-    task.page === 'daily' && task.section === 'otras_tareas'
-  )
+  const waitingTasks = tasks
+    .filter(task => task.page === 'daily' && task.section === 'en_espera')
+    .filter((task, index, arr) => arr.findIndex(t => t.id === task.id) === index)
   
-  const completedTasks = tasks.filter(task => 
-    task.page === 'daily' && task.section === 'completadas'
-  )
+  const routineTasks = tasks
+    .filter(task => task.page === 'daily' && task.section === 'otras_tareas')
+    .filter((task, index, arr) => arr.findIndex(t => t.id === task.id) === index)
+  
+  const completedTasks = tasks
+    .filter(task => task.page === 'daily' && task.section === 'completadas')
+    .filter((task, index, arr) => arr.findIndex(t => t.id === task.id) === index)
 
   
   const big3Count = importantTasks.length
@@ -841,6 +892,7 @@ export const useTasks = () => {
     
     // 🆕 FUNCIÓN DE DRAG AND DROP
     updateTaskOrder,
+    moveTaskBetweenSections,
     
     // 🆕 BULK OPERATIONS
     bulkUpdateStatus,

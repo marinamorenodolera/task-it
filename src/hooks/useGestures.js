@@ -20,7 +20,7 @@ export const useGestures = () => {
       longPressTimer.current = setTimeout(() => {
         isLongPress.current = true
         onLongPress()
-      }, 500) // 500ms for long press
+      }, 250) // 250ms for long press (Best Practice: 200-300ms)
     }
   }, [])
 
@@ -36,7 +36,7 @@ export const useGestures = () => {
     const deltaX = Math.abs(currentTouch.x - touchStart.current.x)
     const deltaY = Math.abs(currentTouch.y - touchStart.current.y)
     
-    if (deltaX > 10 || deltaY > 10) {
+    if (deltaY > 15 || (deltaX > 10 && deltaY > 5)) {
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current)
         longPressTimer.current = null

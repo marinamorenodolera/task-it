@@ -283,7 +283,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     const deltaY = e.clientY - dragStart.y
     
     // Check for horizontal drag right with minimum distance
-    if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 80) {
+    if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > window.innerWidth * 0.35) {
       handleSwipeRight()
     }
     
@@ -926,10 +926,20 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         setShowSwipeHint(false)
       }}
       style={{ 
-        transform: `translateX(${Math.min(dragOffset * 0.3, 30)}px)`,
-        transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+        transform: `translateX(${Math.min(dragOffset * 0.8, window.innerWidth * 0.4)}px)`,
+        transition: isDragging ? 'none' : 'transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
       }}
     >
+      {/* Background parallax effect - SOLO AÑADIR ESTO */}
+      {dragOffset > 10 && (
+        <div 
+          className="fixed inset-0 bg-black/20 pointer-events-none z-0"
+          style={{
+            opacity: Math.min(dragOffset / (window.innerWidth * 0.35), 0.3),
+            transform: `translateX(${-window.innerWidth + (dragOffset * 0.3)}px)`
+          }}
+        />
+      )}
       {/* Swipe hint indicator */}
       {(showSwipeHint || dragOffset > 30) && (
         <div 

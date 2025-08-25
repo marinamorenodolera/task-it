@@ -719,6 +719,7 @@ const TaskItApp = () => {
       }
       
       const result = await addTask(newTaskData)
+      await loadTasks() // Refetch después del addTask exitoso
       
       if (result.data) {
         // Procesar attachments con archivos si existen

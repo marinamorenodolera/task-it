@@ -148,6 +148,10 @@ const TaskCard = ({
           isDragging 
             ? 'shadow-lg border-blue-300 cursor-grabbing' 
             : isBeingReordered 
+            ? 'scale-105 shadow-lg' 
+            : ''
+        } ${
+          isBeingReordered 
             ? 'shadow-lg scale-105' 
             : 'cursor-grab hover:shadow-md hover:scale-[1.02] hover:border-gray-300'
         }`}

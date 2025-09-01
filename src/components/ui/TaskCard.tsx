@@ -62,7 +62,7 @@ const TaskCard = ({
     <div 
       className={`
         bg-white border border-gray-200 rounded-lg shadow-sm p-3 sm:p-4 min-h-[44px] cursor-pointer
-        transition-all duration-200 ease-in-out hover:shadow-md hover:scale-[1.02]
+        transition-all duration-200 ease-in-out hover:shadow-md hover:scale-[1.005]
         ${isCompleted ? 'opacity-60' : ''}
         ${className}
       `}

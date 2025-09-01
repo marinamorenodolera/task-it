@@ -48,7 +48,7 @@ const BaseButton = ({
       onClick={handleClick}
       onTouchStart={(e) => {
         // Prevent iOS double-tap zoom
-        e.currentTarget.style.transform = 'scale(0.95)'
+        e.currentTarget.style.transform = 'scale(0.99)'
       }}
       onTouchEnd={(e) => {
         e.currentTarget.style.transform = 'scale(1)'

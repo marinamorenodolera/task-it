@@ -1,16 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 
 interface BottomNavigationProps {
   className?: string
-  onDailyNavigate?: () => void  // Optional callback to handle Daily navigation
 }
 
-const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationProps) => {
+const BottomNavigation = ({ className = '' }: BottomNavigationProps) => {
   const pathname = usePathname()
-  const router = useRouter()
 
   const tabs = [
     { 
@@ -32,7 +30,7 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
       id: 'weekly', 
       iconPath: "M3 3v16a2 2 0 0 0 2 2h16M7 11l4-4 4 4 4-4",
       label: 'Semanal', 
-      href: '/weekly',
+      href: '/semanal',
       description: 'Revisión semanal'
     },
     { 
@@ -47,29 +45,13 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
   const getCurrentTab = () => {
     if (pathname.startsWith('/inbox')) return 'inbox'
     if (pathname.startsWith('/daily')) return 'daily'
-    if (pathname.startsWith('/weekly')) return 'weekly'
+    if (pathname.startsWith('/semanal')) return 'weekly'
     if (pathname.startsWith('/settings')) return 'settings'
     if (pathname === '/') return 'daily'
     return 'daily'
   }
 
   const currentTab = getCurrentTab()
-
-  const handleDailyClick = (e: React.MouseEvent) => {
-    // If there's a callback provided, use it (for internal state navigation)
-    if (onDailyNavigate) {
-      e.preventDefault()
-      onDailyNavigate()
-      return
-    }
-    
-    // Always navigate to Daily page - let Next.js handle route optimization
-    router.push('/daily')
-  }
-
-  const handleDisabledTabClick = (tabName: string) => {
-    alert(`${tabName} estará disponible próximamente 🚧`)
-  }
 
   return (
     <nav 
@@ -82,23 +64,15 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
           {tabs.map((tab) => {
             const isActive = currentTab === tab.id
             
-            // Special handling for Daily tab with intelligent navigation
+            // Daily tab - usar Link normal como Inbox
             if (tab.id === 'daily') {
               return (
-                <button
+                <Link
                   key={tab.id}
-                  onClick={handleDailyClick}
-                  className={`
-                    relative flex flex-col items-center justify-center
-                    min-h-[60px] rounded-2xl transition-all duration-200
-                    touch-manipulation group
-                    ${isActive 
-                      ? 'text-blue-600' 
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:scale-95'
-                    }
-                  `}
-                  aria-label={`${tab.label} - ${tab.description}`}
-                  aria-current={isActive ? 'page' : undefined}
+                  href="/daily"
+                  className={`relative flex flex-col items-center justify-center min-h-[60px] rounded-2xl transition-all duration-200 touch-manipulation group ${
+                    isActive ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:scale-95'
+                  }`}
                 >
                   <svg 
                     xmlns="http://www.w3.org/2000/svg" 
@@ -110,33 +84,52 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
                     strokeWidth={isActive ? "2.5" : "2"}
                     strokeLinecap="round" 
                     strokeLinejoin="round" 
-                    className={`mb-1 transition-all duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`}
-                    aria-hidden="true"
+                    className={`mb-1 transition-all duration-200 ${isActive ? 'scale-[1.02]' : 'group-hover:scale-[1.01]'}`}
                   >
                     <path d={tab.iconPath} />
                   </svg>
-                  
                   <span className={`text-xs font-medium transition-all duration-200 ${isActive ? 'font-semibold' : ''}`}>
                     {tab.label}
                   </span>
+                </Link>
+              )
+            }
+
+            // Block only settings
+            if (tab.id === 'settings') {
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => alert(`${tab.label} estará disponible próximamente 🚧`)}
+                  className="relative flex flex-col items-center justify-center min-h-[60px] rounded-2xl opacity-50 cursor-not-allowed touch-manipulation"
+                >
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    width="20" 
+                    height="20" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2"
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    className="mb-1"
+                  >
+                    <path d={tab.iconPath} />
+                  </svg>
+                  <span className="text-xs font-medium">{tab.label}</span>
                 </button>
               )
             }
             
-            // Disabled buttons for other tabs (coming soon)
+            // Normal Link for Inbox
             return (
-              <button
+              <Link
                 key={tab.id}
-                onClick={() => handleDisabledTabClick(tab.label)}
-                className={`
-                  relative flex flex-col items-center justify-center
-                  min-h-[60px] rounded-2xl transition-all duration-200
-                  touch-manipulation group
-                  text-gray-300 opacity-60
-                  focus:outline-none focus:ring-2 focus:ring-gray-300
-                `}
-                aria-label={`${tab.label} - Próximamente disponible`}
-                disabled
+                href={tab.href as any}
+                className={`relative flex flex-col items-center justify-center min-h-[60px] rounded-2xl transition-all duration-200 touch-manipulation group ${
+                  isActive ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50 active:scale-95'
+                }`}
               >
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
@@ -145,25 +138,20 @@ const BottomNavigation = ({ className = '', onDailyNavigate }: BottomNavigationP
                   viewBox="0 0 24 24" 
                   fill="none" 
                   stroke="currentColor" 
-                  strokeWidth="2"
+                  strokeWidth={isActive ? "2.5" : "2"}
                   strokeLinecap="round" 
                   strokeLinejoin="round" 
-                  className="mb-1 transition-all duration-200"
-                  aria-hidden="true"
+                  className={`mb-1 transition-all duration-200 ${isActive ? 'scale-[1.02]' : 'group-hover:scale-[1.01]'}`}
                 >
                   <path d={tab.iconPath} />
                   {tab.id === 'inbox' && tab.secondaryPath && (
                     <path d={tab.secondaryPath} />
                   )}
-                  {tab.id === 'settings' && (
-                    <circle cx="12" cy="12" r="3" />
-                  )}
                 </svg>
-                
-                <span className="text-xs font-medium">
+                <span className={`text-xs font-medium transition-all duration-200 ${isActive ? 'font-semibold' : ''}`}>
                   {tab.label}
                 </span>
-              </button>
+              </Link>
             )
           })}
         </div>

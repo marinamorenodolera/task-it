@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { 
   Plus, 
   Mic, 
@@ -24,7 +24,8 @@ import {
   // ICONOS PARA SECCIONES:
   Folder, Flame, Lightbulb, Home,
   Rocket, BarChart, Briefcase, Palette,
-  Heart, Shield, Trophy, Users as UsersIcon, Settings as SettingsIcon
+  Heart, Shield, Trophy, Users as UsersIcon, Settings as SettingsIcon,
+  Image as ImageIcon, FileText, StickyNote, User, MapPin, CalendarDays, ShoppingCart, Inbox
 } from 'lucide-react'
 
 import { useAuth } from '@/hooks/useAuth'
@@ -55,6 +56,7 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
+  useDroppable,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -91,6 +93,7 @@ const TaskItApp = () => {
     loadSubtasks,
     addSubtask,
     deleteSubtask,
+    updateSubtaskOrder,
     updateTaskOrder,
     moveTaskBetweenSections,
     loadTasks
@@ -153,9 +156,8 @@ const TaskItApp = () => {
     return <IconComponent size={size} className={iconData.color} />
   }
 
-  // FUNCIÓN PARA OBTENER TAREAS DE CADA SECCIÓN
-  const getSectionTasks = (sectionId) => {
-    
+  // ✅ MEMOIZADO - FUNCIÓN PARA OBTENER TAREAS DE CADA SECCIÓN
+  const getSectionTasks = useCallback((sectionId) => {
     switch(sectionId) {
       case 'big_three':
         return importantTasks || []
@@ -178,11 +180,139 @@ const TaskItApp = () => {
         }
         return []
     }
+  }, [importantTasks, urgentTasks, waitingTasks, routineTasks, completedTasks])
+
+  // ✅ ESTADO PARA DRAG CROSS-SECTION (inspirado en Weekly)
+  const [dragOverSection, setDragOverSection] = useState(null)
+
+  // ✅ COMPONENTE DROPPABLE PARA SECCIONES VACÍAS
+  const DroppableSection = ({ sectionId, children }) => {
+    const { setNodeRef, isOver } = useDroppable({
+      id: sectionId
+    })
+    
+    return (
+      <div 
+        ref={setNodeRef}
+        data-section={sectionId}
+        className={`transition-all duration-200 rounded-lg p-4 min-h-[60px] ${
+          isOver || dragOverSection === sectionId
+            ? 'bg-blue-50 ring-2 ring-blue-300 ring-opacity-50' 
+            : ''
+        }`}
+      >
+        {children}
+      </div>
+    )
   }
 
-  // FUNCIÓN PARA RENDERIZAR UNA SECCIÓN
+  // ✅ FUNCIÓN PARA RENDERIZAR TASK SECTION CON DROP ZONE
+  const renderTaskSection = (section) => {
+    if (!section.visible) return null
+
+    const sectionTasks = getSectionTasks(section.id)
+    
+    // Renderizado colapsado para secciones vacías
+    if (sectionTasks.length === 0) {
+      return (
+        <DroppableSection key={section.id} sectionId={section.id}>
+          <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            {renderSectionIconLocal(section.id)}
+            {section.name} (0)
+            {section.id === 'big_three' && '/3'}
+            {dragOverSection === section.id && draggedTask && (
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium animate-pulse">
+                SOLTAR AQUÍ
+              </span>
+            )}
+          </h2>
+          
+          {/* Empty state con mensaje para drag */}
+          {dragOverSection === section.id && draggedTask && (
+            <div className="text-center py-4 text-blue-600">
+              <p className="text-sm font-medium">Suelta aquí para mover a {section.name}</p>
+            </div>
+          )}
+        </DroppableSection>
+      )
+    }
+    
+    // Renderizado completo para secciones con tareas
+    return (
+      <div 
+        key={section.id}
+        data-section={section.id}
+        className={`transition-all duration-200 rounded-lg p-2 ${
+          dragOverSection === section.id 
+            ? 'bg-blue-50 ring-2 ring-blue-300 ring-opacity-50' 
+            : ''
+        }`}
+      >
+        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          {renderSectionIconLocal(section.id)}
+          {section.name} ({sectionTasks.length})
+          {section.id === 'big_three' && '/3'}
+          {dragOverSection === section.id && draggedTask && (
+            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium animate-pulse">
+              SOLTAR AQUÍ
+            </span>
+          )}
+        </h2>
+        
+        {section.id === 'urgent' && (
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas que requieren atención inmediata y máxima prioridad.
+          </p>
+        )}
+        
+        {section.id === 'en_espera' && (
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas iniciadas esperando respuesta o feedback externo.
+          </p>
+        )}
+        
+        {section.id === 'otras_tareas' && (
+          <p className="text-sm text-gray-600 mb-3">
+            Tareas creadas rápidas. Selecciona las más importantes para Big 3.
+          </p>
+        )}
+        
+        <div className="space-y-2">
+          {sectionTasks.map((task) => (
+            <SortableTaskCard
+              key={`${section.id}-${task.id}`}
+              task={task}
+              sectionId={section.id}
+              onClick={selectionMode ? () => {
+                setSelectedTasks(prev => 
+                  prev.includes(task.id) 
+                    ? prev.filter(id => id !== task.id)
+                    : [...prev, task.id]
+                )
+              } : () => handleTaskClick(task)}
+              onComplete={toggleTaskComplete}
+              onMoveBetweenSections={moveTaskBetweenSections}
+              getSubtasks={getSubtasks}
+              expandedTasks={expandedTasks}
+              onToggleExpanded={onToggleExpanded}
+              onToggleTaskComplete={toggleComplete}
+              selectionMode={selectionMode}
+              isSelected={selectedTasks.includes(task.id)}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // FUNCIÓN PARA RENDERIZAR UNA SECCIÓN (incluye rituales y actividades)
   const renderSection = (section) => {
     if (!section.visible) return null
+
+    // Para secciones de tareas normales, usar renderTaskSection
+    if (['big_three', 'urgent', 'en_espera', 'otras_tareas'].includes(section.id)) {
+      return renderTaskSection(section)
+    }
 
     // Caso especial para rituales
     if (section.id === 'rituals') {
@@ -369,6 +499,15 @@ const TaskItApp = () => {
               {section.name} ({allCompletedItems.length})
               {showCompletedTasks ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
+            {allCompletedItems.length > 0 && (
+              <span 
+                onClick={handleDeleteAllCompleted}
+                className="text-sm text-red-500 cursor-pointer hover:text-red-700 underline py-1 px-2 touch-manipulation"
+                title="Eliminar todas las tareas completadas"
+              >
+                eliminar todas
+              </span>
+            )}
           </div>
           
           {showCompletedTasks && (
@@ -439,41 +578,6 @@ const TaskItApp = () => {
             Tareas creadas rápidas. Selecciona las más importantes para Big 3.
           </p>
         )}
-        
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          modifiers={[restrictToVerticalAxis]}
-          accessibility={{
-            screenReaderInstructions: {
-              draggable: 'Para reordenar, mantén presionado y arrastra'
-            }
-          }}
-        >
-          <SortableContext 
-            items={sectionTasks.map(task => `${section.id}-${task.id}`)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-2">
-              {sectionTasks.map((task) => (
-                <SortableTaskCard
-                  key={`${section.id}-${task.id}`}
-                  task={task}
-                  sectionId={section.id}
-                  onClick={() => handleTaskClick(task)}
-                  onComplete={toggleTaskComplete}
-                  onMoveBetweenSections={moveTaskBetweenSections}
-                  getSubtasks={getSubtasks}
-                  expandedTasks={expandedTasks}
-                  onToggleExpanded={onToggleExpanded}
-                  onToggleTaskComplete={toggleComplete}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
       </div>
     )
   }
@@ -489,6 +593,9 @@ const TaskItApp = () => {
   const [lastAddedTask, setLastAddedTask] = useState(null)
   const [expandedRitual, setExpandedRitual] = useState(null)
   const [showTaskSelector, setShowTaskSelector] = useState(false)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedTasks, setSelectedTasks] = useState([])
+  const [showMoveModal, setShowMoveModal] = useState(false)
   const [showRitualsConfig, setShowRitualsConfig] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showSectionSettings, setShowSectionSettings] = useState(false)
@@ -505,6 +612,7 @@ const TaskItApp = () => {
   const [showAttachments, setShowAttachments] = useState(false)
   const [attachments, setAttachments] = useState([])
   const [taskDeadline, setTaskDeadline] = useState('')
+  const [selectedSection, setSelectedSection] = useState('otras_tareas')
   const [currentView, setCurrentView] = useState('main')
   const [shouldAutoFocus, setShouldAutoFocus] = useState(false)
   const [showCompletedTasks, setShowCompletedTasks] = useState(true)
@@ -512,8 +620,7 @@ const TaskItApp = () => {
   const [showTaskCreatedModal, setShowTaskCreatedModal] = useState(false)
   const [createdTaskInfo, setCreatedTaskInfo] = useState(null)
   const [scrollPosition, setScrollPosition] = useState(null)
-  const [isNavigating, setIsNavigating] = useState(false)
-  const [navigationDirection, setNavigationDirection] = useState(null)
+  // ✅ ELIMINADO - estados de navegación innecesarios para complejidad visual
   const [expandedTasks, setExpandedTasks] = useState([])
   
   // ✅ DRAG AND DROP STATE
@@ -607,60 +714,29 @@ const TaskItApp = () => {
   }
 
   const handleTaskClick = (task) => {
-    // Cross-browser scroll position - ARREGLA MOBILE ISSUES
-    const currentScrollY = window.pageYOffset || 
-                           document.documentElement.scrollTop || 
-                           window.scrollY || 0
-    
-    // Visual feedback - AÑADE UX PREMIUM
-    setIsNavigating(true)
-    setNavigationDirection('forward')
-    
-    // Guardar posición de forma segura
-    setScrollPosition(currentScrollY)
-    
-    // Micro-delay para feedback visual
-    setTimeout(() => {
-      setSelectedTask(task)
-      setCurrentView('task-detail')
-      
-      // Reset visual feedback después de transición
-      setTimeout(() => {
-        setIsNavigating(false)
-        setNavigationDirection(null)
-      }, 150)
-    }, 50)
+    // ✅ SIMPLE - Solo guardar posición y navegar
+    setScrollPosition(window.scrollY)
+    setSelectedTask(task)
+    setCurrentView('task-detail')
   }
 
   const handleBackToMain = () => {
-    setIsNavigating(true)
-    setNavigationDirection('back')
+    // ✅ SIMPLE - Sin timeouts anidados ni requestAnimationFrame
     setCurrentView('main')
     setSelectedTask(null)
     setShouldAutoFocus(false)
     
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        if (scrollPosition !== null) {
-          // ✅ SCROLL INSTANTÁNEO Y PRECISO - NO SMOOTH
-          window.scrollTo(0, scrollPosition)
-          
-          setTimeout(() => {
-            setScrollPosition(null)
-            setIsNavigating(false)
-            setNavigationDirection(null)
-          }, 100)
-        } else {
-          setIsNavigating(false)
-          setNavigationDirection(null)
-        }
-        
-        const activeElement = document.activeElement
-        if (activeElement && activeElement.tagName === 'INPUT') {
-          activeElement.blur()
-        }
-      }, 50) // Timing más rápido
-    })
+    // Restaurar scroll position si existe
+    if (scrollPosition !== null) {
+      window.scrollTo(0, scrollPosition)
+      setScrollPosition(null)
+    }
+    
+    // Blur active input if any
+    const activeElement = document.activeElement
+    if (activeElement && activeElement.tagName === 'INPUT') {
+      activeElement.blur()
+    }
   }
 
   // Register navigation callback for intelligent Daily navigation
@@ -682,25 +758,66 @@ const TaskItApp = () => {
   }, [currentView, registerNavigationCallback, unregisterNavigationCallback])
 
   const handleDeleteAllCompleted = async () => {
-    const confirmDelete = window.confirm('¿Estás seguro de que quieres borrar todas las tareas completadas? Esta acción no se puede deshacer.')
+    const completedTasksToDelete = allCompletedItems.filter(item => !item.subtasks)
+    const completedRitualsCount = allCompletedItems.filter(item => item.subtasks).length
+    
+    let confirmMessage = `¿Eliminar todas las tareas completadas?`
+    if (completedTasksToDelete.length > 0) {
+      confirmMessage += `\n\n${completedTasksToDelete.length} tareas serán eliminadas permanentemente (incluidos sus adjuntos).`
+    }
+    if (completedRitualsCount > 0) {
+      confirmMessage += `\n\n${completedRitualsCount} rituales completados se mantendrán (se resetean automáticamente a las 6:00 AM).`
+    }
+    
+    const confirmDelete = window.confirm(confirmMessage)
     
     if (confirmDelete) {
+      // Cambiar texto del botón a "eliminando..."
+      const deleteButton = document.querySelector('[title="Eliminar todas las tareas completadas"]')
+      const originalText = deleteButton?.textContent
+      if (deleteButton) {
+        deleteButton.textContent = 'eliminando...'
+        deleteButton.style.pointerEvents = 'none'
+        deleteButton.style.opacity = '0.6'
+      }
+      
       try {
-        // Separar rituales y tareas
-        const completedRituals = allCompletedItems.filter(item => item.subtasks)
-        const completedTasksToDelete = allCompletedItems.filter(item => !item.subtasks)
+        let deletedCount = 0
         
-        // Eliminar tareas completadas usando deleteTask
+        // Eliminar tareas completadas una por una
         for (const task of completedTasksToDelete) {
-          await deleteTask(task.id)
+          try {
+            // deleteTask ya maneja la eliminación de adjuntos via attachmentService.deleteTaskAttachments
+            const result = await deleteTask(task.id)
+            if (!result.error) {
+              deletedCount++
+            } else {
+              console.error(`Error eliminando tarea ${task.id}:`, result.error)
+            }
+          } catch (error) {
+            console.error(`Error eliminando tarea ${task.id}:`, error)
+          }
         }
         
-        // Para rituales, solo los quitamos de la vista (se resetean diariamente automáticamente)
-        // No hacemos nada con los rituales completados, se resetean solos a las 6 AM
+        // Los rituales completados no se tocan - se resetean automáticamente
+        
+        // Mostrar resultado
+        if (deletedCount > 0) {
+          alert(`${deletedCount} tarea${deletedCount > 1 ? 's' : ''} eliminada${deletedCount > 1 ? 's' : ''} correctamente.`)
+        } else if (completedTasksToDelete.length > 0) {
+          alert('No se pudieron eliminar las tareas. Inténtalo de nuevo.')
+        }
         
       } catch (error) {
         console.error('Error al eliminar tareas completadas:', error)
         alert('Hubo un error al eliminar las tareas. Inténtalo de nuevo.')
+      } finally {
+        // Restaurar botón
+        if (deleteButton && originalText) {
+          deleteButton.textContent = originalText
+          deleteButton.style.pointerEvents = 'auto'
+          deleteButton.style.opacity = '1'
+        }
       }
     }
   }
@@ -711,21 +828,21 @@ const TaskItApp = () => {
       
       const newTaskData = {
         title: quickCapture,
-        important: false,
+        important: selectedSection === 'big_three',
         deadline,
         amount,
         link: null,
-        notes: ''
+        notes: '',
+        section: selectedSection
       }
       
       const result = await addTask(newTaskData)
-      await loadTasks() // Refetch después del addTask exitoso
+      // ✅ OPTIMISTIC UPDATE - NO necesita reload, useTasks ya actualiza el estado
       
       if (result.data) {
-        // Procesar attachments con archivos si existen
-        const fileAttachments = attachments.filter(att => att.file)
-        if (fileAttachments.length > 0) {
-          for (const attachment of fileAttachments) {
+        // Procesar TODOS los attachments
+        if (attachments.length > 0) {
+          for (const attachment of attachments) {
             try {
               await addAttachment(result.data.id, attachment)
             } catch (error) {
@@ -746,6 +863,7 @@ const TaskItApp = () => {
         setShowAttachments(false)
         setAttachments([])
         setTaskDeadline('')
+        setSelectedSection('otras_tareas') // Reset to default
         setShouldAutoFocus(false) // Resetear autoFocus después de crear tarea
         
         // Ocultar modal después de 1.5 segundos
@@ -807,7 +925,7 @@ const TaskItApp = () => {
     }
   }
 
-  // ✅ DRAG HANDLERS - OPTIMISTAS
+  // ✅ DRAG HANDLERS - INSPIRADOS EN WEEKLY SYSTEM
   const handleDragStart = (event) => {
     const { active } = event
     setActiveId(active.id)
@@ -818,6 +936,45 @@ const TaskItApp = () => {
     // Encontrar la tarea que se está arrastrando
     const task = [...importantTasks, ...waitingTasks, ...routineTasks, ...urgentTasks].find(t => t.id === taskId)
     setDraggedTask(task)
+  }
+
+  // ✅ DRAG OVER HANDLER - PARA HIGHLIGHT DE SECCIONES (inspirado en Weekly)
+  const handleDragOver = (event) => {
+    const { over } = event
+    
+    if (!over || !draggedTask) {
+      setDragOverSection(null)
+      return
+    }
+
+    const overId = over.id
+    const draggedSectionId = activeId?.split('-')[0]
+
+    // Detectar si estamos sobre una sección diferente
+    if (overId.includes('-')) {
+      // Es una tarea - extraer sección
+      const overSectionId = overId.split('-')[0]
+      
+      if (overSectionId !== draggedSectionId) {
+        setDragOverSection(overSectionId)
+      } else {
+        setDragOverSection(null)
+      }
+    } else {
+      // Es una sección droppable directamente (sección vacía)
+      const validSections = ['big_three', 'urgent', 'en_espera', 'otras_tareas']
+      if (validSections.includes(overId) && overId !== draggedSectionId) {
+        setDragOverSection(overId)
+      } else {
+        setDragOverSection(null)
+      }
+    }
+  }
+
+  // ✅ DRAG LEAVE HANDLER
+  const handleDragLeave = () => {
+    // No limpiar inmediatamente para evitar flickering
+    // setDragOverSection(null)
   }
 
   // Helper function to map section IDs to database values
@@ -837,15 +994,37 @@ const TaskItApp = () => {
     
     setActiveId(null)
     setDraggedTask(null)
+    setDragOverSection(null)  // ✅ Limpiar highlight de secciones
 
     if (!over || active.id === over.id) {
       return
     }
 
-    // Extraer sectionId y taskId de los IDs compuestos (formato: "sectionId-taskId")
+    // Extraer sectionId y taskId de los IDs
     const [activeSectionId, ...activeTaskIdParts] = active.id.split('-')
-    const [overSectionId, ...overTaskIdParts] = over.id.split('-') 
     const activeTaskId = activeTaskIdParts.join('-')
+
+    // ✅ MANEJAR DROP EN SECCIÓN VACÍA (droppable zone directa)
+    if (!over.id.includes('-')) {
+      // Drop directo en una sección vacía
+      const targetSectionId = over.id
+      const sourceSection = getSectionDbValue(activeSectionId)
+      const targetSection = getSectionDbValue(targetSectionId)
+      
+      console.log('🎯 DROP EN SECCIÓN VACÍA - CROSS SECTION DRAG:', {
+        taskId: activeTaskId,
+        from: activeSectionId,
+        to: targetSectionId,
+        sourceSection,
+        targetSection
+      })
+      
+      moveTaskBetweenSections(activeTaskId, sourceSection, targetSection, null)
+      return
+    }
+
+    // ✅ MANEJAR DROP EN TAREA (cross-section o reordering)
+    const [overSectionId, ...overTaskIdParts] = over.id.split('-') 
     const overTaskId = overTaskIdParts.join('-')
 
     // ✅ DETECTAR MOVIMIENTO ENTRE SECCIONES
@@ -853,6 +1032,15 @@ const TaskItApp = () => {
       // Mapear sectionIds a valores de base de datos
       const sourceSection = getSectionDbValue(activeSectionId)
       const targetSection = getSectionDbValue(overSectionId)
+      
+      console.log('🔄 DROP EN OTRA TAREA - CROSS SECTION DRAG:', {
+        taskId: activeTaskId,
+        from: activeSectionId,
+        to: overSectionId,
+        targetTaskId: overTaskId,
+        sourceSection,
+        targetSection
+      })
       
       // Llamar función de movimiento entre secciones
       moveTaskBetweenSections(activeTaskId, sourceSection, targetSection, overTaskId)
@@ -934,7 +1122,7 @@ const TaskItApp = () => {
       
       // ✅ SI HAY ERRORES, RECARGAR PARA RESTAURAR ORDEN ORIGINAL
       if (hasErrors) {
-        await loadTasks()
+        await loadTasks() // Solo recargar si hay errores reales
       }
     }, 100) // Pequeño delay para que el usuario vea el cambio inmediato
   }
@@ -973,18 +1161,21 @@ const TaskItApp = () => {
     }
   }
 
-  // Calcular stats incluyendo todas las secciones (rituales + tareas)
-  // Solo contamos tareas activas (no eliminadas, ya que tasks viene del hook filtrado)
-  const activeTasks = tasks.filter(task => !task.completed) // Tareas pendientes
-  const completedTasksOnly = tasks.filter(task => task.completed) // Tareas completadas
-  const totalTasks = activeTasks.length + totalRituals // Total de tareas pendientes + rituales
-  const completedTasksCount = completedTasksOnly.length + completedRituals // Completadas + rituales completados
+  // ✅ MEMOIZADO - Calcular stats incluyendo todas las secciones (rituales + tareas)
+  const { activeTasks, completedTasksOnly, totalTasks, completedTasksCount } = useMemo(() => {
+    const activeTasks = tasks.filter(task => !task.completed) // Tareas pendientes
+    const completedTasksOnly = tasks.filter(task => task.completed) // Tareas completadas
+    const totalTasks = activeTasks.length + totalRituals // Total de tareas pendientes + rituales
+    const completedTasksCount = completedTasksOnly.length + completedRituals // Completadas + rituales completados
+    
+    return { activeTasks, completedTasksOnly, totalTasks, completedTasksCount }
+  }, [tasks, totalRituals, completedRituals])
   
-  // Para la nueva sección "Tareas Completadas" al final
-  const allCompletedItems = [
+  // ✅ MEMOIZADO - Para la nueva sección "Tareas Completadas" al final
+  const allCompletedItems = useMemo(() => [
     ...rituals.filter(ritual => ritual.completed),
     ...completedTasksOnly
-  ]
+  ], [rituals, completedTasksOnly])
 
   // Auth is now handled globally by AuthGuard - TaskItApp only renders when authenticated
 
@@ -1018,58 +1209,33 @@ const TaskItApp = () => {
           }
         }}
         onToggleComplete={async (taskId) => {
-          // ✅ Actualizar selectedTask inmediatamente para feedback visual
-          if (selectedTask?.id === taskId) {
-            setSelectedTask(prev => ({...prev, completed: !prev.completed}))
-          }
+          // ✅ UNIFICADO - Solo useTasks maneja el estado, se sincroniza automáticamente
           await toggleTaskComplete(taskId)
+          // selectedTask se actualiza via useEffect cuando tasks cambia
         }}
         onToggleImportant={async (taskId) => {
-          // ✅ Actualizar selectedTask inmediatamente para feedback visual
-          if (selectedTask?.id === taskId) {
-            const newImportantState = !selectedTask.important
-            setSelectedTask({...selectedTask, important: newImportantState})
-            
-            // Ejecutar toggleBig3 y verificar resultado
-            const result = await toggleBig3(taskId)
-            
-            // Si falló, revertir el cambio
-            if (result?.error) {
-              setSelectedTask({...selectedTask, important: !newImportantState})
-              alert(result.error)
-            } else {
-              // Actualizar con la tarea fresca del estado global
-              const updatedTask = tasks.find(t => t.id === taskId)
-              if (updatedTask) {
-                setSelectedTask(updatedTask)
-              }
-            }
-          } else {
-            await toggleBig3(taskId)
+          // ✅ UNIFICADO - Solo useTasks maneja el estado
+          const result = await toggleBig3(taskId)
+          if (result?.error) {
+            alert(result.error)
           }
+          // selectedTask se actualiza automáticamente via useEffect
         }}
         onUpdate={async (taskId, updatedTask) => {
+          // ✅ UNIFICADO - Solo useTasks maneja el estado
           const result = await updateTask(taskId, updatedTask)
-          if (!result.error) {
-            setSelectedTask({...selectedTask, ...updatedTask})
-          }
+          // selectedTask se actualiza automáticamente via useEffect
           return result
         }}
         onToggleWaitingStatus={async (taskId) => {
-          // ✅ Actualizar selectedTask inmediatamente para feedback visual
-          if (selectedTask?.id === taskId) {
-            const newSection = selectedTask.section === 'en_espera' ? 'otras_tareas' : 'en_espera'
-            setSelectedTask({...selectedTask, section: newSection})
-          }
+          // ✅ UNIFICADO - Solo useTasks maneja el estado
           await toggleWaitingStatus(taskId)
+          // selectedTask se actualiza automáticamente via useEffect
         }}
         onToggleUrgent={async (taskId) => {
-          // ✅ Actualizar selectedTask inmediatamente para feedback visual
-          if (selectedTask?.id === taskId) {
-            const newSection = selectedTask.section === 'urgent' ? 'otras_tareas' : 'urgent'
-            setSelectedTask({...selectedTask, section: newSection})
-          }
+          // ✅ UNIFICADO - Solo useTasks maneja el estado
           await toggleUrgent(taskId)
+          // selectedTask se actualiza automáticamente via useEffect
         }}
         onAddAttachment={addAttachment}
         onDeleteAttachment={deleteAttachment}
@@ -1080,17 +1246,14 @@ const TaskItApp = () => {
         onToggleTaskComplete={toggleComplete}
         addSubtask={addSubtask}
         deleteSubtask={deleteSubtask}
+        updateSubtaskOrder={updateSubtaskOrder}
       />
     )
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 navigation-transition ${
-      isNavigating ? 'navigating' : ''
-    } ${
-      navigationDirection === 'forward' ? 'navigation-forward' : 
-      navigationDirection === 'back' ? 'navigation-back' : ''
-    }`}>
+    <div className="min-h-screen bg-gray-50">
+      {/* ✅ ELIMINADO - clases CSS de navegación innecesarias */}
       {/* Header Móvil */}
       <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-4">
@@ -1128,20 +1291,16 @@ const TaskItApp = () => {
               value={quickCapture}
               onChange={(e) => {
                 setQuickCapture(e.target.value)
-                if (e.target.value.trim() && !showAttachments) {
-                  setShowAttachments(true)
-                }
+                // ✅ NO auto-show attachments - menos molesto para el usuario
               }}
               onFocus={() => {
                 setShouldAutoFocus(true) // Usuario quiere crear tarea
-                if (quickCapture.trim()) {
-                  setShowAttachments(true)
-                }
+                // ✅ NO auto-show attachments en focus - solo cuando usuario lo pida
               }}
               onClick={() => {
                 setShouldAutoFocus(true) // Usuario hace click para crear tarea
               }}
-              className="flex-1 min-h-[44px] touch-manipulation px-4 py-3 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="flex-1 min-h-[60px] touch-manipulation px-4 py-4 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               autoFocus={shouldAutoFocus}
             />
             <BaseButton
@@ -1160,6 +1319,134 @@ const TaskItApp = () => {
             </BaseButton>
           </form>
 
+          {/* Quick Actions */}
+          {quickCapture.trim() && (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                {/* Section Selector */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedSection('big_three')}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] ${
+                      selectedSection === 'big_three'
+                        ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+                        : 'bg-gray-100 text-gray-600 hover:bg-yellow-50'
+                    }`}
+                  >
+                    <Star size={14} />
+                    Big 3
+                  </button>
+                  
+                  <button
+                    onClick={() => setSelectedSection('urgent')}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] ${
+                      selectedSection === 'urgent'
+                        ? 'bg-red-100 text-red-700 border border-red-300'
+                        : 'bg-gray-100 text-gray-600 hover:bg-red-50'
+                    }`}
+                  >
+                    <Flame size={14} />
+                    Urgente
+                  </button>
+                  
+                  <button
+                    onClick={() => setSelectedSection('en_espera')}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] ${
+                      selectedSection === 'en_espera'
+                        ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                        : 'bg-gray-100 text-gray-600 hover:bg-orange-50'
+                    }`}
+                  >
+                    <Clock size={14} />
+                    En Espera
+                  </button>
+                </div>
+                
+                {/* Attachments Button */}
+                {!showAttachments && (
+                  <button
+                    onClick={() => setShowAttachments(true)}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] ${
+                      attachments.length > 0 || taskDeadline
+                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Link size={14} />
+                    <span>
+                      Adjuntos
+                      {(attachments.length > 0 || taskDeadline) && (
+                        <span className="ml-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full">
+                          {attachments.length + (taskDeadline ? 1 : 0)}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                )}
+              </div>
+              
+              {/* Attachments Preview */}
+              {(attachments.length > 0 || taskDeadline) && (
+                <div className="flex flex-wrap gap-1">
+                  {taskDeadline && (
+                    <div className="flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs">
+                      <Calendar size={12} />
+                      {new Date(taskDeadline).toLocaleDateString('es-ES')}
+                    </div>
+                  )}
+                  {attachments.map((att, index) => {
+                    // Determinar color y contenido según tipo
+                    let bgColor, textColor, icon, label
+                    
+                    if (att.file && att.file.type?.startsWith('image/')) {
+                      bgColor = 'bg-pink-100'
+                      textColor = 'text-pink-700'
+                      icon = <ImageIcon size={12} />
+                      label = 'Imagen'
+                    } else if (att.file && !att.file.type?.startsWith('image/')) {
+                      bgColor = 'bg-blue-100'
+                      textColor = 'text-blue-700'
+                      icon = <FileText size={12} />
+                      label = 'Documento'
+                    } else if (att.type === 'note') {
+                      bgColor = 'bg-purple-100'
+                      textColor = 'text-purple-700'
+                      icon = <StickyNote size={12} />
+                      label = 'Nota'
+                    } else if (att.type === 'amount') {
+                      bgColor = 'bg-green-100'
+                      textColor = 'text-green-700'
+                      icon = <Euro size={12} />
+                      label = 'Importe'
+                    } else if (att.type === 'contact') {
+                      bgColor = 'bg-indigo-100'
+                      textColor = 'text-indigo-700'
+                      icon = <User size={12} />
+                      label = 'Contacto'
+                    } else if (att.type === 'location') {
+                      bgColor = 'bg-red-100'
+                      textColor = 'text-red-700'
+                      icon = <MapPin size={12} />
+                      label = 'Ubicación'
+                    } else {
+                      bgColor = 'bg-blue-100'
+                      textColor = 'text-blue-700'
+                      icon = <Link size={12} />
+                      label = att.type || 'Adjunto'
+                    }
+                    
+                    return (
+                      <div key={index} className={`flex items-center gap-1 px-2 py-1 ${bgColor} ${textColor} rounded text-xs`}>
+                        {icon}
+                        {label}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          
           <SmartAttachmentsPanel
             isOpen={showAttachments && quickCapture.trim()}
             onClose={() => setShowAttachments(false)}
@@ -1207,12 +1494,23 @@ const TaskItApp = () => {
         {/* Voice Capture */}
         <div className="flex gap-2 mt-3">
           <button
-            onClick={() => setShowTaskSelector(true)}
-            className="flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors touch-manipulation"
+            onClick={() => {
+              if (selectionMode) {
+                setSelectionMode(false)
+                setSelectedTasks([])
+              } else {
+                setSelectionMode(true)
+              }
+            }}
+            className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] rounded-lg transition-colors touch-manipulation ${
+              selectionMode 
+                ? 'bg-red-100 text-red-700 hover:bg-red-200' 
+                : 'bg-green-100 text-green-700 hover:bg-green-200'
+            }`}
           >
-            <Target size={16} className="text-green-700" />
+            <Target size={16} className={selectionMode ? "text-red-700" : "text-green-700"} />
             <span className="text-xs sm:text-sm font-medium">
-              <span className="hidden sm:inline">Gestionar </span>Tareas
+              {selectionMode ? 'Cancelar' : <><span className="hidden sm:inline">Gestionar </span>Tareas</>}
             </span>
           </button>
           
@@ -1268,8 +1566,34 @@ const TaskItApp = () => {
       {/* Lista de Tareas */}
       <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
         
-        {/* RENDERIZADO DINÁMICO DE SECCIONES RESPETANDO CONFIGURACIÓN DEL USUARIO */}
-        {visibleSections.map((section) => renderSection(section))}
+        {/* ✅ DNDCONTEXT UNIFICADO - INSPIRADO EN WEEKLY SYSTEM */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragOver={handleDragOver}
+          modifiers={[restrictToVerticalAxis]}
+          accessibility={{
+            screenReaderInstructions: {
+              draggable: 'Para mover entre secciones, mantén presionado y arrastra'
+            }
+          }}
+        >
+          {/* ✅ SORTABLECONTEXT UNIFICADO CON TODAS LAS TAREAS */}
+          <SortableContext 
+            items={[
+              ...importantTasks.map(task => `big_three-${task.id}`),
+              ...urgentTasks.map(task => `urgent-${task.id}`),
+              ...waitingTasks.map(task => `en_espera-${task.id}`),
+              ...routineTasks.map(task => `otras_tareas-${task.id}`)
+            ]}
+            strategy={verticalListSortingStrategy}
+          >
+            {/* RENDERIZADO DINÁMICO DE SECCIONES RESPETANDO CONFIGURACIÓN DEL USUARIO */}
+            {visibleSections.map((section) => renderSection(section))}
+          </SortableContext>
+        </DndContext>
       </div>
 
 
@@ -1663,6 +1987,237 @@ const TaskItApp = () => {
                 className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg transition-colors min-h-[44px] touch-manipulation"
               >
                 🗑️ Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Button */}
+      {selectionMode && selectedTasks.length > 0 && (
+        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50">
+          <button
+            onClick={() => setShowMoveModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 transition-all min-h-[44px] touch-manipulation"
+          >
+            <Target size={16} />
+            <span className="font-medium">
+              Mover {selectedTasks.length} tarea{selectedTasks.length > 1 ? 's' : ''}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Move Modal */}
+      {showMoveModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4"
+          onClick={() => setShowMoveModal(false)}
+        >
+          <div 
+            className="bg-white rounded-xl max-w-md w-full max-h-[80vh] overflow-y-auto mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 border-b border-gray-200">
+              <h3 className="text-base font-semibold">Mover {selectedTasks.length} tarea{selectedTasks.length > 1 ? 's' : ''}</h3>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              {/* Daily Sections */}
+              <div>
+                <h4 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <Calendar size={18} className="text-blue-600" />
+                  Daily
+                </h4>
+                <div className="grid grid-cols-2 gap-1 ml-6">
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'big_three', page: 'daily' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-yellow-50 rounded transition-colors border border-yellow-200 bg-yellow-50"
+                  >
+                    <Star size={14} className="text-yellow-500" />
+                    <div className="text-sm font-medium">Big 3</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'otras_tareas', page: 'daily' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-blue-100 rounded transition-colors border border-blue-200 bg-blue-50"
+                  >
+                    <Folder size={14} className="text-blue-500" />
+                    <div className="text-sm font-medium">Otras Tareas</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'en_espera', page: 'daily' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-orange-100 rounded transition-colors border border-orange-200 bg-orange-50"
+                  >
+                    <Clock size={14} className="text-orange-500" />
+                    <div className="text-sm font-medium">En Espera</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'urgent', page: 'daily' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-red-100 rounded transition-colors border border-red-200 bg-red-50"
+                  >
+                    <Flame size={14} className="text-red-500" />
+                    <div className="text-sm font-medium">Urgente</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Inbox Sections */}
+              <div>
+                <h4 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <Inbox size={18} className="text-blue-600" />
+                  Inbox Sections
+                </h4>
+                <div className="grid grid-cols-2 gap-1 ml-6">
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { 
+                          page: 'inbox', 
+                          section: 'otras_tareas',
+                          status: 'inbox',
+                          scheduled_date: null
+                        })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-blue-100 rounded transition-colors border border-blue-200 bg-blue-50 min-h-[44px] touch-manipulation"
+                  >
+                    <Inbox size={14} className="text-blue-500" />
+                    <div className="text-sm font-medium">Inbox</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'monthly', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-purple-100 rounded transition-colors border border-purple-200 bg-purple-50 min-h-[44px] touch-manipulation"
+                  >
+                    <CalendarDays size={14} className="text-purple-500" />
+                    <div className="text-sm font-medium">Monthly</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'shopping', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-green-100 rounded transition-colors border border-green-200 bg-green-50 min-h-[44px] touch-manipulation"
+                  >
+                    <ShoppingCart size={14} className="text-green-500" />
+                    <div className="text-sm font-medium">Shopping</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Weekly Days */}
+              <div>
+                <h4 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <Calendar size={18} className="text-purple-600" />
+                  Semanal
+                </h4>
+                <div className="grid grid-cols-3 gap-1 ml-6">
+                  {['lunes', 'martes', 'miércoles', 'jueves', 'viernes'].map((dayName, index) => {
+                    const today = new Date()
+                    const startOfWeek = new Date(today)
+                    startOfWeek.setDate(today.getDate() - today.getDay() + 1) // Lunes
+                    const targetDate = new Date(startOfWeek)
+                    targetDate.setDate(startOfWeek.getDate() + index)
+                    const dateString = targetDate.toISOString().split('T')[0]
+                    
+                    return (
+                      <button
+                        key={dayName}
+                        onClick={async () => {
+                          for (const taskId of selectedTasks) {
+                            await updateTask(taskId, { 
+                              page: 'weekly', 
+                              section: 'otras_tareas',
+                              scheduled_date: dateString 
+                            })
+                          }
+                          setShowMoveModal(false)
+                          setSelectionMode(false)
+                          setSelectedTasks([])
+                        }}
+                        className="flex items-center justify-center gap-1 p-2 text-center hover:bg-blue-100 rounded transition-colors border border-blue-200 bg-blue-50"
+                      >
+                        <span className="text-sm font-medium capitalize">{dayName.slice(0,3)}</span>
+                        <span className="text-sm font-medium text-gray-500">{targetDate.getDate()}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+
+            </div>
+            
+            <div className="p-3 border-t border-gray-200 flex gap-2">
+              <button
+                onClick={async () => {
+                  const confirmDelete = window.confirm(`¿Eliminar ${selectedTasks.length} tarea${selectedTasks.length > 1 ? 's' : ''} permanentemente?`)
+                  if (confirmDelete) {
+                    for (const taskId of selectedTasks) {
+                      await deleteTask(taskId)
+                    }
+                    setShowMoveModal(false)
+                    setSelectionMode(false)
+                    setSelectedTasks([])
+                  }
+                }}
+                className="flex-1 flex items-center justify-center gap-1 py-2 text-sm text-red-600 hover:text-white hover:bg-red-600 transition-colors border border-red-300 rounded bg-red-50"
+              >
+                <Trash2 size={12} />
+                Eliminar
+              </button>
+              <button
+                onClick={() => setShowMoveModal(false)}
+                className="flex-1 flex items-center justify-center gap-1 py-2 text-sm text-black font-bold hover:text-gray-800 transition-colors border border-gray-300 rounded bg-gray-50 hover:bg-gray-100"
+              >
+                <X size={12} />
+                Cancelar
               </button>
             </div>
           </div>

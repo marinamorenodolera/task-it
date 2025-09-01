@@ -1,14 +1,33 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import BaseCard from '../ui/BaseCard'
 import BaseButton from '../ui/BaseButton'
 import AttachmentItem from '../attachments/AttachmentItem'
+import SmartAttachmentsPanel from '../attachments/SmartAttachmentsPanel'
+import SortableSubtask from './SortableSubtask'
 import { useGestures } from '@/hooks/useGestures'
 import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { TASK_SECTIONS, getSectionColorClasses } from '../../config/taskSections'
 import { SECTION_ICON_MAP } from '@/utils/sectionIcons'
-import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, Inbox, MapPin, FileText, User, Trash2, Flame, Target } from 'lucide-react'
+import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, Inbox, MapPin, FileText, User, Trash2, Flame, Target, ChevronRight, CalendarDays, ShoppingCart, Image, StickyNote } from 'lucide-react'
+// ✅ DRAG AND DROP IMPORTS EXACTOS COMO Daily
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 
-const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onToggleUrgent, onAddAttachment, onDeleteAttachment, onReloadAttachments, subtasksCount = 0, getSubtasks, loadSubtasks, onToggleTaskComplete, addSubtask, deleteSubtask }) => {
+const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, onUpdate, onToggleImportant, onToggleWaitingStatus, onToggleUrgent, onAddAttachment, onDeleteAttachment, onReloadAttachments, subtasksCount = 0, getSubtasks, loadSubtasks, onToggleTaskComplete, addSubtask, deleteSubtask, updateSubtaskOrder }) => {
   const [isEditing, setIsEditing] = useState(false)
   const [editedTask, setEditedTask] = useState(task)
   
@@ -54,18 +73,23 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
   // Función para determinar qué sección está activa actualmente - USAR SISTEMA section/page
   const getCurrentSection = () => {
+    const currentTask = editedTask.section ? editedTask : task
+    
     // Usar el campo 'section' directamente de la BD
-    if (task.section === 'completadas') return 'completadas'
-    if (task.section === 'urgent') return 'urgent'
-    if (task.section === 'big_three') return 'big_three'
-    if (task.section === 'en_espera') return 'en_espera'
-    if (task.section === 'otras_tareas') return 'normal'
+    if (currentTask.section === 'completadas') return 'completadas'
+    if (currentTask.section === 'urgent') return 'urgent'
+    if (currentTask.section === 'big_three') return 'big_three'
+    if (currentTask.section === 'en_espera') return 'en_espera'
+    if (currentTask.section === 'otras_tareas') return 'normal'
+    if (currentTask.section === 'inbox_tasks') return 'normal'
+    if (currentTask.section === 'monthly') return 'monthly'
+    if (currentTask.section === 'shopping') return 'shopping'
     
     // Fallback por compatibilidad
-    if (task.completed) return 'completadas'
-    if (task.priority === 'urgent') return 'urgent'
-    if (task.is_big_3_today || task.important) return 'big_three'
-    if (task.status === 'pending') return 'en_espera'
+    if (currentTask.completed) return 'completadas'
+    if (currentTask.priority === 'urgent') return 'urgent'
+    if (currentTask.is_big_3_today || currentTask.important) return 'big_three'
+    if (currentTask.status === 'pending') return 'en_espera'
     
     return 'normal'
   }
@@ -183,51 +207,412 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     }
   }
 
-  // Renderizado de secciones estilo Gestionar Tareas
-  const renderSectionSelector = () => {
-    const currentSection = getCurrentSection()
+  // Funciones para mover entre páginas
+  const moveToDaily = async (section = null) => {
+    if (!section) {
+      // Si no se especifica sección, mostrar el selector
+      setShowDailySectionPicker(true)
+      return
+    }
     
+    try {
+      // SOLO pasar datos primitivos, NO objetos complejos
+      const taskId = task.id
+      const updates = {
+        page: 'daily',
+        section: section,
+        scheduled_date: null
+      }
+      
+      const result = await onUpdate(taskId, updates)
+      
+      if (result?.error) {
+        alert(`Error al mover a Daily: ${result.error}`)
+        return
+      }
+      
+      const sectionNames = {
+        'urgent': 'Urgente 🔥',
+        'big_three': 'Big 3 ⭐',
+        'en_espera': 'En Espera ⏰',
+        'otras_tareas': 'Otras Tareas 📋'
+      }
+      alert(`✅ Tarea movida a Daily - ${sectionNames[section] || section}`)
+      setShowDailySectionPicker(false)
+      onBack()
+    } catch (error) {
+      console.error('Error moving to Daily:', error)
+      alert('Error al mover a Daily')
+    }
+  }
+
+  const moveToInbox = async () => {
+    try {
+      const taskId = task.id
+      const updates = {
+        page: 'inbox',
+        section: 'otras_tareas',
+        scheduled_date: null
+      }
+      
+      const result = await onUpdate(taskId, updates)
+      
+      if (result?.error) {
+        alert(`Error al mover a Inbox: ${result.error}`)
+        return
+      }
+      
+      alert('✅ Tarea movida a Inbox 📥')
+      onBack()
+    } catch (error) {
+      console.error('Error moving to Inbox:', error)
+      alert('Error al mover a Inbox')
+    }
+  }
+
+  const moveToWeekly = async (dateString) => {
+    try {
+      const taskId = task.id
+      const updates = {
+        page: 'weekly',
+        scheduled_date: dateString,
+        section: 'otras_tareas'
+      }
+      
+      const result = await onUpdate(taskId, updates)
+      
+      if (result?.error) {
+        alert(`Error al programar en la semana: ${result.error}`)
+        return
+      }
+      
+      const date = new Date(dateString)
+      const dayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+      const dayName = dayNames[date.getDay()]
+      alert(`✅ Tarea programada para ${dayName} 📊`)
+      setShowWeeklyPicker(false)
+      onBack()
+    } catch (error) {
+      console.error('Error moving to Weekly:', error)
+      alert('Error al programar en la semana')
+    }
+  }
+
+  // Función para calcular los próximos 5 días laborales
+  const getWorkDaysFromToday = () => {
+    const today = new Date()
+    const days = []
+    let currentDate = new Date(today)
+    
+    // Si hoy es día laboral, empezar desde hoy
+    const todayDay = today.getDay()
+    const isWeekday = todayDay !== 0 && todayDay !== 6
+    
+    if (isWeekday) {
+      // Si hoy es día laboral, empezar desde hoy
+      currentDate = new Date(today)
+    } else {
+      // Si es fin de semana, empezar desde lunes
+      if (todayDay === 0) currentDate.setDate(today.getDate() + 1) // Domingo → Lunes
+      if (todayDay === 6) currentDate.setDate(today.getDate() + 2) // Sábado → Lunes
+    }
+    
+    for (let i = 0; i < 5; i++) {
+      while (currentDate.getDay() === 0 || currentDate.getDay() === 6) {
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
+      
+      const dayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+      const shortNames = ['D', 'L', 'M', 'X', 'J', 'V', 'S']
+      const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+      
+      days.push({
+        date: new Date(currentDate),
+        dateString: currentDate.toISOString().split('T')[0],
+        dayName: dayNames[currentDate.getDay()],
+        dayNameCapitalized: dayNames[currentDate.getDay()].charAt(0).toUpperCase() + dayNames[currentDate.getDay()].slice(1),
+        shortName: shortNames[currentDate.getDay()],
+        monthName: monthNames[currentDate.getMonth()],
+        isToday: currentDate.toDateString() === today.toDateString(),
+        isTomorrow: currentDate.toDateString() === new Date(today.getTime() + 24*60*60*1000).toDateString(),
+        dayNumber: currentDate.getDate()
+      })
+      
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+    return days
+  }
+
+  // Función para obtener texto de ubicación actual
+  const getCurrentLocationText = () => {
+    const currentSection = getCurrentSection()
+    const page = editedTask.page || task.page || 'daily'
+    
+    // Mapeo de páginas
+    const pageNames = {
+      'daily': 'Daily',
+      'weekly': 'Semanal', 
+      'inbox': 'Inbox'
+    }
+    
+    // Mapeo de secciones
+    const sectionNames = {
+      'big_three': 'Big 3',
+      'otras_tareas': 'Otras Tareas',
+      'en_espera': 'En Espera', 
+      'urgent': 'Urgente',
+      'normal': 'Otras Tareas',
+      'completadas': 'Completadas',
+      'monthly': 'Monthly',
+      'shopping': 'Shopping'
+    }
+    
+    const pageName = pageNames[page] || 'Daily'
+    const sectionName = sectionNames[currentSection] || 'Otras Tareas'
+    
+    // Si es semanal, añadir el día
+    if (page === 'weekly' && task.scheduled_date) {
+      const date = new Date(task.scheduled_date)
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+      const dayName = dayNames[date.getDay()]
+      return `${pageName} - ${dayName}`
+    }
+    
+    return `${pageName} - ${sectionName}`
+  }
+
+  // Función para obtener icono de ubicación actual
+  const getCurrentLocationIcon = () => {
+    const currentSection = getCurrentSection()
+    const page = editedTask.page || task.page || 'daily'
+    
+    if (page === 'inbox') return <Inbox size={18} className="text-gray-500" />
+    if (page === 'weekly') return <Calendar size={18} className="text-purple-500" />
+    
+    // Daily sections
+    if (currentSection === 'big_three') return <Star size={18} className="text-yellow-500" />
+    if (currentSection === 'urgent') return <Flame size={18} className="text-red-500" />
+    if (currentSection === 'en_espera') return <Clock size={18} className="text-orange-500" />
+    if (currentSection === 'monthly') return <CalendarDays size={18} className="text-purple-500" />
+    if (currentSection === 'shopping') return <ShoppingCart size={18} className="text-green-500" />
+    
+    return <FileText size={18} className="text-blue-500" />
+  }
+
+  // Función para manejar movimiento de tarea con handleBulkOperation style
+  const handleBulkOperation = async (operation, updates = {}) => {
+    try {
+      console.log('🔄 TaskDetailScreen handleBulkOperation - task:', task.id, 'from page:', task.page)
+      const result = await operation(task.id)
+      console.log('✅ TaskDetailScreen handleBulkOperation - SUCCESS')
+      
+      // Actualizar estado local para mostrar nueva ubicación inmediatamente
+      setEditedTask(prev => ({
+        ...prev,
+        ...updates,
+        updated_at: new Date().toISOString()
+      }))
+      
+      // Colapsar después de mover
+      setIsLocationSelectorExpanded(false)
+      setSelectedPage('daily')
+    } catch (error) {
+      console.error('❌ TaskDetailScreen handleBulkOperation - ERROR:', error)
+      console.error('❌ Full error object:', JSON.stringify(error, null, 2))
+      alert('Error al mover la tarea: ' + error.message)
+    }
+  }
+
+  // Renderizado de secciones compactas estilo TaskManagement
+  const renderSectionSelector = () => {
     return (
-      <div className="p-6 space-y-6">
-        <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Target size={16} />
-            Mover tarea a:
-          </h4>
-          <div className="grid grid-cols-3 gap-3">
-            {SECTION_OPTIONS.map(section => {
-              const isActive = currentSection === section.id
+      <div>
+        {/* Selector directo */}
+        <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Target size={16} />
+          Mover tarea a:
+        </h4>
+        
+        {/* Selector de páginas horizontal - separados */}
+        <div className="flex flex-wrap gap-2 mb-4 justify-center">
+          <button
+            onClick={() => setSelectedPage(selectedPage === 'daily' ? null : 'daily')}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border min-h-[44px] ${
+              selectedPage === 'daily'
+                ? 'bg-blue-50 text-blue-600 border-blue-300 shadow-sm'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-100 hover:text-blue-600'
+            }`}
+          >
+            <Calendar size={16} className={selectedPage === 'daily' ? 'text-blue-600' : 'text-gray-400'} />
+            Daily
+          </button>
+          
+          <button
+            onClick={() => setSelectedPage(selectedPage === 'weekly' ? null : 'weekly')}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border min-h-[44px] ${
+              selectedPage === 'weekly'
+                ? 'bg-purple-50 text-purple-600 border-purple-300 shadow-sm'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 hover:bg-purple-100 hover:text-purple-600'
+            }`}
+          >
+            <Calendar size={16} className={selectedPage === 'weekly' ? 'text-purple-600' : 'text-gray-400'} />
+            Semanal
+          </button>
+          
+          <button
+            onClick={() => setSelectedPage(selectedPage === 'inbox' ? null : 'inbox')}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border min-h-[44px] ${
+              selectedPage === 'inbox'
+                ? 'bg-blue-50 text-blue-600 border-blue-300 shadow-sm'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-100 hover:text-blue-600'
+            }`}
+          >
+            <Inbox size={16} className={selectedPage === 'inbox' ? 'text-blue-600' : 'text-gray-400'} />
+            Inbox
+          </button>
+        </div>
+
+        {/* Secciones dinámicas según página seleccionada */}
+        {selectedPage === 'daily' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { section: 'big_three', page: 'daily' }),
+                  { section: 'big_three', page: 'daily' }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-yellow-50 rounded-lg transition-colors border border-yellow-200 bg-yellow-50"
+              >
+                <Star size={16} className="text-yellow-500" />
+                <div className="text-sm font-medium">Big 3</div>
+              </button>
               
-              // Mapear IDs para obtener configuración de colores
-              const sectionIconMapping = {
-                'big_three': 'star',
-                'en_espera': 'clock',
-                'normal': 'folder',
-                'completadas': 'check-circle',
-                'urgent': 'flame',
-                'otras_tareas': 'folder'
-              }
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { section: 'otras_tareas', page: 'daily' }),
+                  { section: 'otras_tareas', page: 'daily' }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 bg-blue-50"
+              >
+                <FileText size={16} className="text-blue-500" />
+                <div className="text-sm font-medium">Otras Tareas</div>
+              </button>
               
-              const iconName = sectionIconMapping[section.id] || 'folder'
-              const sectionConfig = SECTION_ICON_MAP[iconName] || SECTION_ICON_MAP['folder']
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { section: 'en_espera', page: 'daily' }),
+                  { section: 'en_espera', page: 'daily' }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-orange-100 rounded-lg transition-colors border border-orange-200 bg-orange-50"
+              >
+                <Clock size={16} className="text-orange-500" />
+                <div className="text-sm font-medium">En Espera</div>
+              </button>
               
-              return (
-                <button
-                  key={section.id}
-                  onClick={() => handleSectionChange(section.id)}
-                  className={`p-3 rounded-xl border-2 transition-all duration-200 text-center min-h-[60px] hover:shadow-md ${
-                    isActive
-                      ? 'bg-blue-50 border-blue-500 text-blue-700'
-                      : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    {renderTaskSectionIcon(section.id)}
-                    <span className="text-xs font-medium">{section.name}</span>
-                  </div>
-                </button>
-              )
-            })}
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { section: 'urgent', page: 'daily' }),
+                  { section: 'urgent', page: 'daily' }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-red-100 rounded-lg transition-colors border border-red-200 bg-red-50"
+              >
+                <Flame size={16} className="text-red-500" />
+                <div className="text-sm font-medium">Urgente</div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedPage === 'weekly' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              {['lunes', 'martes', 'miércoles', 'jueves', 'viernes'].map((dayName, index) => {
+                const today = new Date()
+                const startOfWeek = new Date(today)
+                startOfWeek.setDate(today.getDate() - today.getDay() + 1)
+                const targetDate = new Date(startOfWeek)
+                targetDate.setDate(startOfWeek.getDate() + index)
+                const dateString = targetDate.toISOString().split('T')[0]
+                
+                return (
+                  <button
+                    key={dayName}
+                    onClick={() => handleBulkOperation((taskId) => onUpdate(taskId, { 
+                      page: 'weekly', 
+                      section: 'otras_tareas',
+                      scheduled_date: dateString 
+                    }))}
+                    className="flex items-center justify-center gap-1 p-3 text-center hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 bg-blue-50"
+                  >
+                    <span className="text-sm font-medium capitalize">{dayName.slice(0,3)}</span>
+                    <span className="text-sm font-medium text-gray-500">{targetDate.getDate()}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {selectedPage === 'inbox' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { 
+                    page: 'inbox', 
+                    section: 'inbox_tasks',
+                    status: 'inbox',
+                    scheduled_date: null
+                  }),
+                  { page: 'inbox', section: 'inbox_tasks', status: 'inbox', scheduled_date: null }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 bg-blue-50"
+              >
+                <Inbox size={16} className="text-blue-500" />
+                <div className="text-sm font-medium">Inbox</div>
+              </button>
+              
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { 
+                    page: 'inbox', 
+                    section: 'monthly',
+                    status: 'inbox',
+                    scheduled_date: null
+                  }),
+                  { page: 'inbox', section: 'monthly', status: 'inbox', scheduled_date: null }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-purple-100 rounded-lg transition-colors border border-purple-200 bg-purple-50"
+              >
+                <CalendarDays size={16} className="text-purple-500" />
+                <div className="text-sm font-medium">Monthly</div>
+              </button>
+              
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { 
+                    page: 'inbox', 
+                    section: 'shopping',
+                    status: 'inbox',
+                    scheduled_date: null
+                  }),
+                  { page: 'inbox', section: 'shopping', status: 'inbox', scheduled_date: null }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-green-100 rounded-lg transition-colors border border-green-200 bg-green-50"
+              >
+                <ShoppingCart size={16} className="text-green-500" />
+                <div className="text-sm font-medium">Shopping</div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Ubicación actual destacada - al final */}
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-3 mt-4">
+          <div className="flex items-center gap-2">
+            {getCurrentLocationIcon()}
+            <span className="text-sm font-medium text-gray-700">Ubicada en:</span>
+            <span className="text-sm font-bold text-gray-900">{getCurrentLocationText()}</span>
           </div>
         </div>
       </div>
@@ -240,7 +625,66 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   const [showAddSubtask, setShowAddSubtask] = useState(false)
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const [subtasksLoaded, setSubtasksLoaded] = useState(false)
+  const [showWeeklyPicker, setShowWeeklyPicker] = useState(false)
+  const [showDailySectionPicker, setShowDailySectionPicker] = useState(false)
+  const [isLocationSelectorExpanded, setIsLocationSelectorExpanded] = useState(true)
+  const [selectedPage, setSelectedPage] = useState(null)
+  const subtaskInputRef = useRef(null)
   const { handleTouchStart, handleTouchMove, handleTouchEnd } = useGestures()
+  
+  // ✅ DRAG AND DROP SENSORS EXACTOS COMO Daily
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Más tolerancia para mobile
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+  
+  // ✅ DRAG STATE PARA SUBTAREAS
+
+  // ✅ DRAG HANDLERS BASADOS EN Daily
+  const handleSubtaskDragStart = (event) => {
+    // Drag start logic if needed in the future
+  }
+
+  const handleSubtaskDragEnd = async (event) => {
+    const { active, over } = event
+    
+    
+    if (!over || active.id === over.id) {
+      return
+    }
+    
+    // Extraer IDs reales
+    const activeSubtaskId = active.id.split('-').slice(1).join('-')
+    const overSubtaskId = over.id.split('-').slice(1).join('-')
+    
+    const subtasks = getSubtasks(task.id)
+    const oldIndex = subtasks.findIndex(subtask => subtask.id === activeSubtaskId)
+    const newIndex = subtasks.findIndex(subtask => subtask.id === overSubtaskId)
+    
+    if (oldIndex === -1 || newIndex === -1) return
+    
+    // ✅ REORDENAR USANDO arrayMove COMO Daily
+    const reorderedSubtasks = arrayMove(subtasks, oldIndex, newIndex)
+    
+    // ✅ ACTUALIZAR EN BD Y CACHE
+    try {
+      await updateSubtaskOrder(task.id, reorderedSubtasks)
+    } catch (error) {
+      console.error('Error reordenando subtareas:', error)
+    }
+  }
   
   // Handle swipe right to go back
   const handleSwipeRight = () => {
@@ -341,13 +785,13 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   }, [task.id]) // Solo cuando cambia la tarea específica
 
   const attachmentTypes = [
-    { id: 'image', label: 'Imagen', icon: '🖼️', color: 'pink' },
-    { id: 'document', label: 'Documento', icon: '📄', color: 'orange' },
-    { id: 'link', label: 'URL', icon: '🔗', color: 'blue' },
-    { id: 'contact', label: 'Contacto', icon: '👤', color: 'indigo' },
-    { id: 'note', label: 'Nota', icon: '📝', color: 'purple' },
-    { id: 'amount', label: 'Importe', icon: '💰', color: 'green' },
-    { id: 'location', label: 'Ubicación', icon: '📍', color: 'red' }
+    { id: 'image', label: 'Imagen', icon: <Image size={16} />, color: 'pink' },
+    { id: 'document', label: 'Documento', icon: <FileText size={16} />, color: 'orange' },
+    { id: 'link', label: 'URL', icon: <Link size={16} />, color: 'blue' },
+    { id: 'contact', label: 'Contacto', icon: <User size={16} />, color: 'indigo' },
+    { id: 'note', label: 'Nota', icon: <StickyNote size={16} />, color: 'purple' },
+    { id: 'amount', label: 'Importe', icon: <Euro size={16} />, color: 'green' },
+    { id: 'location', label: 'Ubicación', icon: <MapPin size={16} />, color: 'red' }
   ]
   
   const formatTaskDeadline = (deadlineISO) => {
@@ -372,7 +816,23 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   const handleSave = async () => {
     try {
       if (onUpdate) {
-        const result = await onUpdate(task.id, editedTask)
+        // Solo enviar los campos que realmente se editaron
+        const updates = {
+          title: editedTask.title || editedTask.text,
+          description: editedTask.description || editedTask.notes
+        }
+        
+        // Preservar campos importantes que no deben perderse
+        if (task.scheduled_date) updates.scheduled_date = task.scheduled_date
+        if (task.page) updates.page = task.page
+        if (task.section) updates.section = task.section
+        
+        console.log('💾 Guardando cambios en TaskDetail:', {
+          taskId: task.id,
+          updates: updates,
+          originalTask: task
+        })
+        const result = await onUpdate(task.id, updates)
         if (!result || !result.error) {
           setIsEditing(false)
         } else {
@@ -392,12 +852,17 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     })
     
     if (!result.error) {
-      setNewSubtaskTitle('')
-      setShowAddSubtask(false)
+      // ✅ FLUJO CONTINUO - resetear input pero mantener formulario abierto
+      setNewSubtaskTitle('') // Limpiar input
+      // NO setear setShowAddSubtask(false) - mantener abierto para próxima subtarea
+      
       // Recargar subtareas para mostrar la nueva
       if (loadSubtasks && task?.id && task.id !== 'undefined' && typeof task.id === 'string') {
         await loadSubtasks(task.id)
       }
+      
+      // ✅ MANTENER FOCUS después de añadir
+      setTimeout(() => subtaskInputRef.current?.focus(), 100)
     } else {
       console.error('Error al crear subtarea:', result.error)
     }
@@ -429,7 +894,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-orange-700 font-medium">
-              <span className="text-lg">📅</span>
+              <Calendar size={18} />
               <span>Añadir Fecha Límite</span>
             </div>
             <input
@@ -490,7 +955,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-pink-50 border-2 border-pink-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-pink-700 font-medium">
-              <span className="text-lg">🖼️</span>
+              <Image size={18} />
               <span>Añadir Imagen</span>
             </div>
             <input
@@ -540,7 +1005,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-orange-700 font-medium">
-              <span className="text-lg">📄</span>
+              <FileText size={18} />
               <span>Añadir Documento</span>
             </div>
             <input
@@ -591,7 +1056,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-blue-700 font-medium">
-              <span className="text-lg">🔗</span>
+              <Link size={18} />
               <span>Añadir URL</span>
             </div>
             <input
@@ -637,7 +1102,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-indigo-50 border-2 border-indigo-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-indigo-700 font-medium">
-              <span className="text-lg">👤</span>
+              <User size={18} />
               <span>Añadir Contacto</span>
             </div>
             <input
@@ -695,7 +1160,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-purple-700 font-medium">
-              <span className="text-lg">📝</span>
+              <StickyNote size={18} />
               <span>Añadir Nota</span>
             </div>
             <textarea
@@ -733,7 +1198,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-green-50 border-2 border-green-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-green-700 font-medium">
-              <span className="text-lg">💰</span>
+              <Euro size={18} />
               <span>Añadir Importe</span>
             </div>
             <div className="flex gap-2">
@@ -800,7 +1265,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-red-50 border-2 border-red-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-red-700 font-medium">
-              <span className="text-lg">📍</span>
+              <MapPin size={18} />
               <span>Añadir Ubicación</span>
             </div>
             <input
@@ -850,7 +1315,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         return (
           <div className="space-y-3 bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
             <div className="flex items-center gap-2 text-orange-700 font-medium">
-              <span className="text-lg">📅</span>
+              <Calendar size={18} />
               <span>Añadir Fecha límite</span>
             </div>
             <input
@@ -1029,7 +1494,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
           
         </div>
 
-        {/* Section Selector - Estilo Gestionar Tareas */}
+        {/* Section Selector - Versión Compacta */}
         <div className="mb-6">
           {renderSectionSelector()}
         </div>
@@ -1089,8 +1554,9 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             {/* Solo mostrar header y botón si NO está editando */}
             {!isEditing && (
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  📎 Adjuntos ({taskAttachments.length})
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Link size={18} className="text-gray-600" />
+                  Adjuntos ({taskAttachments.length})
                 </h3>
                 <button
                   onClick={() => setShowAttachmentPanel(!showAttachmentPanel)}
@@ -1107,7 +1573,6 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm mt-3 p-3 sm:p-4 space-y-3 sm:space-y-4 bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200 mb-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-blue-600">📎</span>
                     <span className="font-medium text-blue-900 text-sm sm:text-base">Añadir a tu tarea:</span>
                   </div>
                   {/* Solo mostrar botón cerrar si NO está editando */}
@@ -1121,76 +1586,39 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                   )}
                 </div>
 
-                {!selectedAttachmentType ? (
-                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-                    <button 
-                      onClick={() => setSelectedAttachmentType('deadline')}
-                      className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-orange-700 hover:bg-orange-50 border border-orange-200"
-                    >
-                      <span className="text-base sm:text-sm">📅</span>
-                      <span className="hidden xs:inline sm:inline">Fecha límite</span>
-                      <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Fecha límite</span>
-                    </button>
-                    <button 
-                      onClick={() => setSelectedAttachmentType('link')}
-                      className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-blue-700 hover:bg-blue-50 border border-blue-200"
-                    >
-                      <span className="text-base sm:text-sm">🔗</span>
-                      <span className="hidden xs:inline sm:inline">Link</span>
-                      <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Link</span>
-                    </button>
-                    <button 
-                      onClick={() => setSelectedAttachmentType('amount')}
-                      className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-green-700 hover:bg-green-50 border border-green-200"
-                    >
-                      <span className="text-base sm:text-sm">💰</span>
-                      <span className="hidden xs:inline sm:inline">Importe</span>
-                      <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Importe</span>
-                    </button>
-                    <button 
-                      onClick={() => setSelectedAttachmentType('note')}
-                      className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-purple-700 hover:bg-purple-50 border border-purple-200"
-                    >
-                      <span className="text-base sm:text-sm">📝</span>
-                      <span className="hidden xs:inline sm:inline">Nota</span>
-                      <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Nota</span>
-                    </button>
-                    <button 
-                      onClick={() => setSelectedAttachmentType('image')}
-                      className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-pink-700 hover:bg-pink-50 border border-pink-200"
-                    >
-                      <span className="text-base sm:text-sm">🖼️</span>
-                      <span className="hidden xs:inline sm:inline">Imagen</span>
-                      <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Imagen</span>
-                    </button>
-                    <button 
-                      onClick={() => setSelectedAttachmentType('document')}
-                      className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-orange-700 hover:bg-orange-50 border border-orange-200"
-                    >
-                      <span className="text-base sm:text-sm">📄</span>
-                      <span className="hidden xs:inline sm:inline">Documento</span>
-                      <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Documento</span>
-                    </button>
-                    <button 
-                      onClick={() => setSelectedAttachmentType('location')}
-                      className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-red-700 hover:bg-red-50 border border-red-200"
-                    >
-                      <span className="text-base sm:text-sm">📍</span>
-                      <span className="hidden xs:inline sm:inline">Ubicación</span>
-                      <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Ubicación</span>
-                    </button>
-                    <button 
-                      onClick={() => setSelectedAttachmentType('contact')}
-                      className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200"
-                    >
-                      <span className="text-base sm:text-sm">👤</span>
-                      <span className="hidden xs:inline sm:inline">Contacto</span>
-                      <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Contacto</span>
-                    </button>
-                  </div>
-                ) : (
-                  renderAttachmentForm(selectedAttachmentType)
-                )}
+                <SmartAttachmentsPanel
+                  isOpen={true}
+                  onClose={() => {}} 
+                  onAttach={async (attachment) => {
+                    try {
+                      // Verificar que attachment tenga la estructura correcta
+                      if (attachment && typeof attachment === 'object') {
+                        await onAddAttachment(attachment)
+                        await onReloadAttachments()
+                      } else {
+                        console.error('Attachment data is invalid:', attachment)
+                      }
+                    } catch (error) {
+                      console.error('Error añadiendo adjunto:', error)
+                      alert('Error al añadir adjunto: ' + error.message)
+                    }
+                  }}
+                  onDeadlineSet={async (deadline) => {
+                    try {
+                      const result = await onUpdate(task.id, { 
+                        deadline: deadline,
+                        due_date: deadline.toISOString().split('T')[0]
+                      })
+                      if (!result || !result.error) {
+                        setEditedTask(prev => ({ ...prev, deadline }))
+                      }
+                    } catch (error) {
+                      console.error('Error añadiendo fecha límite:', error)
+                    }
+                  }}
+                  taskText={task.title}
+                  existingAttachments={taskAttachments}
+                />
               </div>
             )}
 
@@ -1242,8 +1670,9 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-4">
           <div className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                📋 Subtareas ({getSubtasks(task.id).length})
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <CheckCircle size={18} className="text-gray-600" />
+                Subtareas ({getSubtasks(task.id).length})
               </h3>
               <button 
                 onClick={() => setShowAddSubtask(!showAddSubtask)}
@@ -1253,59 +1682,38 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               </button>
             </div>
 
-            {/* Lista de subtareas - solo si hay alguna */}
+            {/* ✅ DRAG AND DROP DE SUBTAREAS - PATRÓN EXACTO DE Daily */}
             {getSubtasks(task.id).length > 0 ? (
-              <div className="space-y-2 mb-4">
-                {getSubtasks(task.id).map(subtask => (
-                  <div 
-                    key={subtask.id} 
-                    onClick={() => onToggleTaskComplete(subtask.id)}
-                    className={`bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-purple-200 transition-all cursor-pointer p-3 transition-all duration-200 ease-out opacity-100 ${
-                      subtask.completed 
-                        ? 'border-green-200 bg-green-50' 
-                        : 'border-gray-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="transition-colors text-green-500">
-                        {subtask.completed ? (
-                          <CircleCheck size={18} />
-                        ) : (
-                          <Circle size={18} />
-                        )}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <span className={`text-sm font-medium transition-all duration-300 ${
-                          subtask.completed 
-                            ? 'text-green-700 line-through' 
-                            : 'text-gray-900'
-                        }`}>
-                          {subtask.title}
-                        </span>
-                      </div>
-
-                      {/* Botón eliminar */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          
-                          try {
-                            deleteSubtask(subtask.id)
-                          } catch (error) {
-                            console.error('❌ Error al ejecutar deleteSubtask:', error)
-                          }
-                          
-                        }}
-                        className="text-red-400 hover:text-red-600 transition-colors p-1"
-                        title="Eliminar subtarea"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleSubtaskDragStart}
+                onDragEnd={handleSubtaskDragEnd}
+                modifiers={[restrictToVerticalAxis]}
+                accessibility={{
+                  screenReaderInstructions: {
+                    draggable: 'Para reordenar subtareas, mantén presionado y arrastra'
+                  }
+                }}
+              >
+                {/* ✅ SORTABLECONTEXT CON IDs COMO Daily */}
+                <SortableContext 
+                  items={getSubtasks(task.id).map(subtask => `subtask-${subtask.id}`)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2 mb-4">
+                    {getSubtasks(task.id).map(subtask => (
+                      <SortableSubtask
+                        key={subtask.id}
+                        subtask={subtask}
+                        onToggleComplete={onToggleTaskComplete}
+                        onDelete={deleteSubtask}
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
+                </SortableContext>
+                
+              </DndContext>
             ) : (
               <div className="text-center py-4 text-gray-500 text-sm mb-4">
                 No hay subtareas creadas
@@ -1316,6 +1724,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
             {showAddSubtask && (
               <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
                 <input
+                  ref={subtaskInputRef}
                   type="text"
                   value={newSubtaskTitle}
                   onChange={(e) => setNewSubtaskTitle(e.target.value)}
@@ -1324,6 +1733,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                   onKeyPress={(e) => {
                     if (e.key === 'Enter') {
                       handleAddSubtask()
+                      // ✅ MANTENER FOCUS después de añadir - ya se maneja en handleAddSubtask
                     }
                   }}
                   autoFocus

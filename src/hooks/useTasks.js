@@ -64,6 +64,7 @@ export const useTasks = () => {
             priority: task.priority || 'normal', // Map priority with default
             page: task.page || 'daily', // Map page with default
             section: task.section, // Map section exactly as it comes from DB
+            scheduled_date: task.scheduled_date, // IMPORTANTE: Mapear scheduled_date para tareas semanales
             
             // 🆕 CAMPOS DE SUBTAREAS VERIFICADOS EN SUPABASE:
             parent_task_id: task.parent_task_id,
@@ -97,8 +98,15 @@ export const useTasks = () => {
       // await Promise.all(subtasksPromises)
       
       // Log successful load only once
-      if (process.env.NODE_ENV === 'development' && mappedTasks.length > 0) {
-        console.debug('📋 Tasks loaded:', mappedTasks.length)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📋 Tasks loaded:', mappedTasks.length)
+        const weeklyTasks = uniqueTasks.filter(t => t.page === 'weekly')
+        console.log('📅 Weekly tasks:', weeklyTasks.length, weeklyTasks.map(t => ({
+          id: t.id,
+          title: t.title,
+          page: t.page,
+          scheduled_date: t.scheduled_date
+        })))
       }
     } catch (err) {
       console.error('📋 Error loading tasks:', err)
@@ -130,7 +138,8 @@ export const useTasks = () => {
         priority: taskData.priority || 'normal',
         status: taskData.status || 'inbox',
         page: taskData.page || 'daily',
-        section: taskData.section || 'otras_tareas'  // Keep default for new tasks
+        section: taskData.section || 'otras_tareas',  // Keep default for new tasks
+        scheduled_date: taskData.scheduled_date || null  // Importante para tareas semanales
       }
       
       // Solo agregar campos opcionales si están definidos
@@ -174,10 +183,23 @@ export const useTasks = () => {
         is_expanded: data.is_expanded || false,
         status: data.status || 'inbox',
         page: data.page || 'daily',
-        section: data.section || 'otras_tareas'  // Keep default for new tasks
+        section: data.section || 'otras_tareas',  // Keep default for new tasks
+        scheduled_date: data.scheduled_date || null  // Para tareas semanales
       }
+      
+      console.log('🆕 Nueva tarea creada y mapeada:', {
+        id: newTask.id,
+        title: newTask.title,
+        page: newTask.page,
+        scheduled_date: newTask.scheduled_date,
+        section: newTask.section
+      })
 
-      setTasks(prev => [newTask, ...prev])
+      setTasks(prev => {
+        const updated = [newTask, ...prev]
+        console.log('📝 Estado de tareas actualizado:', updated.length, 'tareas')
+        return updated
+      })
       return { data: newTask, error: null }
     } catch (err) {
       console.error('Error en addTask:', err)
@@ -189,32 +211,56 @@ export const useTasks = () => {
   const updateTask = async (taskId, updates) => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
 
-
     try {
+      // FILTRAR solo campos válidos, NO objetos DOM
+      const cleanUpdates = {}
+      
+      // Solo permitir campos primitivos
+      const allowedFields = [
+        'title', 'description', 'notes', 'completed', 'important', 
+        'deadline', 'due_date', 'amount', 'link', 'status', 
+        'priority', 'page', 'section', 'scheduled_date', 
+        'assigned_day', 'estimated_minutes'
+      ]
+      
+      // Filtrar solo campos permitidos y valores primitivos
+      for (const [key, value] of Object.entries(updates || {})) {
+        if (allowedFields.includes(key)) {
+          // Solo permitir primitivos, null, o Date objects
+          if (value === null || value === undefined || 
+              typeof value === 'string' || typeof value === 'number' || 
+              typeof value === 'boolean' || value instanceof Date) {
+            cleanUpdates[key] = value
+          }
+        }
+      }
+
       // Map component format to database format
       const dbUpdates = {}
-      if (updates.title !== undefined) dbUpdates.title = updates.title
-      if (updates.description !== undefined) dbUpdates.description = updates.description
-      if (updates.notes !== undefined) dbUpdates.description = updates.notes
-      if (updates.completed !== undefined) dbUpdates.completed = updates.completed
-      if (updates.important !== undefined) dbUpdates.is_big_3_today = updates.important
-      if (updates.deadline !== undefined) dbUpdates.deadline = updates.deadline?.toISOString() || null
-      if (updates.due_date !== undefined) dbUpdates.deadline = updates.due_date
-      if (updates.amount !== undefined) dbUpdates.amount = updates.amount
-      if (updates.link !== undefined) dbUpdates.link = updates.link
-      if (updates.status !== undefined) dbUpdates.status = updates.status
-      if (updates.priority !== undefined) dbUpdates.priority = updates.priority
-      if (updates.page !== undefined) dbUpdates.page = updates.page
-      if (updates.section !== undefined) dbUpdates.section = updates.section
+      if (cleanUpdates.title !== undefined) dbUpdates.title = cleanUpdates.title
+      if (cleanUpdates.description !== undefined) dbUpdates.description = cleanUpdates.description
+      if (cleanUpdates.notes !== undefined) dbUpdates.description = cleanUpdates.notes
+      if (cleanUpdates.completed !== undefined) dbUpdates.completed = cleanUpdates.completed
+      if (cleanUpdates.important !== undefined) dbUpdates.is_big_3_today = cleanUpdates.important
+      if (cleanUpdates.deadline !== undefined) dbUpdates.deadline = cleanUpdates.deadline instanceof Date ? cleanUpdates.deadline.toISOString() : cleanUpdates.deadline
+      if (cleanUpdates.due_date !== undefined) dbUpdates.deadline = cleanUpdates.due_date
+      if (cleanUpdates.amount !== undefined) dbUpdates.amount = cleanUpdates.amount
+      if (cleanUpdates.link !== undefined) dbUpdates.link = cleanUpdates.link
+      if (cleanUpdates.status !== undefined) dbUpdates.status = cleanUpdates.status
+      if (cleanUpdates.priority !== undefined) dbUpdates.priority = cleanUpdates.priority
+      if (cleanUpdates.page !== undefined) dbUpdates.page = cleanUpdates.page
+      if (cleanUpdates.section !== undefined) dbUpdates.section = cleanUpdates.section
+      if (cleanUpdates.scheduled_date !== undefined) dbUpdates.scheduled_date = cleanUpdates.scheduled_date
+      if (cleanUpdates.assigned_day !== undefined) dbUpdates.assigned_day = cleanUpdates.assigned_day
 
-
+      console.log('📝 UpdateTask DB Updates:', { taskId, dbUpdates })
+      
       const { data, error } = await supabase
         .from('tasks')
         .update(dbUpdates)
         .eq('id', taskId)
         .eq('user_id', user.id)
         .select()
-        .single()
 
       if (error) {
         // Log detailed error information
@@ -222,19 +268,23 @@ export const useTasks = () => {
         throw error
       }
 
-      // Update local state
+      // Si hay múltiples resultados, tomar el primero
+      const updatedTask = Array.isArray(data) ? data[0] : data
+
+      // Update local state - con verificaciones seguras
       setTasks(prev => prev.map(task => 
         task.id === taskId 
           ? {
               ...task,
-              ...updates,
-              deadline: data.deadline ? new Date(data.deadline) : null,
-              updated_at: data.updated_at
+              ...cleanUpdates,
+              deadline: updatedTask?.deadline ? new Date(updatedTask.deadline) : task.deadline,
+              updated_at: updatedTask?.updated_at || task.updated_at,
+              scheduled_date: updatedTask?.scheduled_date !== undefined ? updatedTask.scheduled_date : task.scheduled_date
             }
           : task
       ))
 
-      return { data, error: null }
+      return { data: updatedTask || cleanUpdates, error: null }
     } catch (err) {
       console.error('Error en updateTask:', err.message || err)
       return { data: null, error: err.message || err.toString() || 'Error desconocido en updateTask' }
@@ -496,9 +546,31 @@ export const useTasks = () => {
   }
 
   const deleteSubtask = async (subtaskId) => {
-    
     try {
+      // ✅ ACTUALIZAR CACHE ANTES del DELETE (optimistic update)
+      const originalCache = { ...subtasksCache }
+      
+      setSubtasksCache(prevCache => {
+        const newCache = { ...prevCache }
+        
+        // Remover subtarea de TODOS los parents en cache
+        Object.keys(newCache).forEach(parentId => {
+          newCache[parentId] = newCache[parentId].filter(sub => sub.id !== subtaskId)
+        })
+        
+        return newCache
+      })
+      
+      // Ejecutar delete en BD
       const result = await deleteTask(subtaskId)
+      
+      if (result?.error) {
+        // ✅ REVERTIR CACHE si falla el delete
+        console.error('Error eliminando subtarea, revirtiendo cache:', result.error)
+        setSubtasksCache(originalCache)
+        throw new Error(result.error)
+      }
+      
       return result
     } catch (error) {
       console.error('❌ Error en deleteSubtask hook:', error)
@@ -522,6 +594,47 @@ export const useTasks = () => {
       return { error: null }
     } catch (err) {
       console.error('Error updating task order:', err)
+      return { error: err.message }
+    }
+  }
+
+  // ✅ NUEVA FUNCIÓN: Reordenar subtareas
+  const updateSubtaskOrder = async (parentTaskId, reorderedSubtasks) => {
+    if (!user?.id) return { error: 'Usuario no autenticado' }
+    
+    try {
+      // ✅ OPTIMISTIC UPDATE - actualizar cache inmediatamente
+      setSubtasksCache(prev => ({
+        ...prev,
+        [parentTaskId]: reorderedSubtasks
+      }))
+      
+      // ✅ BATCH UPDATE - actualizar orden de todas las subtareas
+      const updates = reorderedSubtasks.map((subtask, index) => 
+        supabase
+          .from('tasks')
+          .update({ subtask_order: index + 1 })
+          .eq('id', subtask.id)
+          .eq('user_id', user.id)
+      )
+      
+      const results = await Promise.all(updates)
+      
+      // Verificar si alguna actualización falló
+      const errors = results.filter(result => result.error)
+      if (errors.length > 0) {
+        throw new Error(`Error actualizando ${errors.length} subtareas`)
+      }
+      
+      return { error: null }
+    } catch (err) {
+      console.error('Error updating subtask order:', err)
+      
+      // ✅ REVERTIR CACHE si falla
+      if (loadSubtasks) {
+        await loadSubtasks(parentTaskId)
+      }
+      
       return { error: err.message }
     }
   }
@@ -889,6 +1002,7 @@ export const useTasks = () => {
     loadSubtasks,
     toggleTaskExpanded,
     deleteSubtask,
+    updateSubtaskOrder,
     
     // 🆕 FUNCIÓN DE DRAG AND DROP
     updateTaskOrder,

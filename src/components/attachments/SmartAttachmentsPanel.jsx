@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
 import BaseCard from '../ui/BaseCard'
 import BaseButton from '../ui/BaseButton'
+import { Calendar, Image as ImageIcon, FileText, Link, User, StickyNote, Euro, MapPin, ArrowLeft } from 'lucide-react'
 
 const SmartAttachmentsPanel = ({ 
   isOpen, 
   onClose, 
   onAttach, 
+  onDeadlineSet,
   taskText = "",
   existingAttachments = []
 }) => {
@@ -13,60 +15,63 @@ const SmartAttachmentsPanel = ({
   const [attachmentData, setAttachmentData] = useState({})
   
   const attachmentTypes = [
-    { id: 'deadline', label: 'Fecha límite', icon: '📅', color: 'orange' },
-    { id: 'image', label: 'Imagen', icon: '🖼️', color: 'pink' },
-    { id: 'document', label: 'Documento', icon: '📄', color: 'orange' },
-    { id: 'link', label: 'URL', icon: '🔗', color: 'blue' },
-    { id: 'contact', label: 'Contacto', icon: '👤', color: 'indigo' },
-    { id: 'note', label: 'Nota', icon: '📝', color: 'purple' },
-    { id: 'amount', label: 'Importe', icon: '💰', color: 'green' },
-    { id: 'location', label: 'Ubicación', icon: '📍', color: 'red' }
+    { id: 'deadline', label: 'Fecha límite', icon: Calendar, color: 'orange' },
+    { id: 'image', label: 'Imagen', icon: ImageIcon, color: 'pink' },
+    { id: 'document', label: 'Documento', icon: FileText, color: 'blue' },
+    { id: 'link', label: 'URL', icon: Link, color: 'blue' },
+    { id: 'contact', label: 'Contacto', icon: User, color: 'indigo' },
+    { id: 'note', label: 'Nota', icon: StickyNote, color: 'purple' },
+    { id: 'amount', label: 'Importe', icon: Euro, color: 'green' },
+    { id: 'location', label: 'Ubicación', icon: MapPin, color: 'red' }
   ]
 
   const renderAttachmentForm = (type, data, setData, onAttach) => {
     switch (type) {
       case 'deadline':
         return (
-          <div className="space-y-3 bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 text-orange-700 font-medium">
-              <span className="text-lg">📅</span>
-              <span>Añadir Fecha Límite</span>
-            </div>
+          <div className="space-y-4">
             <input
-              type="datetime-local"
+              type="date"
               value={data.deadline || ''}
               onChange={(e) => setData({...data, deadline: e.target.value})}
-              className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full px-4 py-3 min-h-[48px] border border-orange-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white text-base font-medium text-orange-700 touch-manipulation"
+              style={{
+                colorScheme: 'light',
+                accentColor: '#ea580c'
+              }}
             />
-            <div className="flex gap-2">
-              <BaseButton
-                onClick={() => {
-                  onAttach({
-                    type: 'deadline',
-                    title: 'Fecha límite',
-                    content: new Date(data.deadline).toLocaleString('es-ES'),
-                    metadata: {
-                      deadline: data.deadline
+            {data.deadline && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    // Para fecha límite usar onDeadlineSet
+                    if (onDeadlineSet) {
+                      onDeadlineSet(new Date(data.deadline))
                     }
-                  })
-                  setActiveType(null)
-                  setData({})
-                }}
-                disabled={!data.deadline}
-                className="flex-1 bg-orange-600 hover:bg-orange-700"
-              >
-                Añadir Fecha Límite
-              </BaseButton>
-              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
-                Cancelar
-              </BaseButton>
-            </div>
+                    setActiveType(null)
+                    setData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Añadir
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveType(null)
+                    setAttachmentData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm border border-gray-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         )
 
       case 'image':
         return (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <input
               type="file"
               accept="image/*"
@@ -86,40 +91,48 @@ const SmartAttachmentsPanel = ({
                   reader.readAsDataURL(file)
                 }
               }}
-              className="w-full px-3 py-2 border border-pink-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+              className="w-full px-4 py-4 min-h-[48px] rounded-lg focus:outline-none text-sm touch-manipulation cursor-pointer file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-pink-100 file:text-pink-700 hover:file:bg-pink-200"
             />
             {data.image && (
-              <div className="space-y-2">
-                <img 
-                  src={data.image} 
-                  alt="Preview" 
-                  className="max-w-full h-32 object-cover rounded-lg border border-pink-200"
-                />
-                <p className="text-xs text-gray-600">{data.fileName}</p>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <img 
+                    src={data.image} 
+                    alt="Preview" 
+                    className="max-w-full h-32 object-cover rounded-lg border border-pink-200"
+                  />
+                  <p className="text-xs text-pink-600">{data.fileName}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (data.file) {
+                        onAttach({ file: data.file })
+                        setActiveType(null)
+                        setData({})
+                      } else {
+                        console.error('No file selected for image')
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg transition-colors text-sm font-medium"
+                  >
+                    Añadir
+                  </button>
+                  <button
+                    onClick={() => setActiveType(null)}
+                    className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm border border-gray-300"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex gap-2">
-              <BaseButton
-                onClick={() => {
-                  onAttach({ file: data.file })
-                  setActiveType(null)
-                  setData({})
-                }}
-                disabled={!data.image}
-                className="flex-1 bg-pink-600 hover:bg-pink-700"
-              >
-                Añadir Imagen
-              </BaseButton>
-              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
-                Cancelar
-              </BaseButton>
-            </div>
           </div>
         )
 
       case 'document':
         return (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <input
               type="file"
               accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
@@ -135,30 +148,43 @@ const SmartAttachmentsPanel = ({
                   })
                 }
               }}
-              className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full px-4 py-4 min-h-[48px] rounded-lg focus:outline-none text-sm touch-manipulation cursor-pointer file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200"
             />
             {data.document && (
-              <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                <p className="text-sm font-medium">{data.fileName}</p>
-                <p className="text-xs text-gray-600">{(data.fileSize / 1024).toFixed(1)} KB</p>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-sm font-medium text-blue-700">{data.fileName}</p>
+                    <p className="text-xs text-blue-600">{(data.fileSize / 1024).toFixed(1)} KB</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (data.file) {
+                        onAttach({ file: data.file })
+                        setActiveType(null)
+                        setData({})
+                      } else {
+                        console.error('No file selected for document')
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                  >
+                    Añadir
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveType(null)
+                      setAttachmentData({})
+                    }}
+                    className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm border border-gray-300"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex gap-2">
-              <BaseButton
-                onClick={() => {
-                  onAttach({ file: data.file })
-                  setActiveType(null)
-                  setData({})
-                }}
-                disabled={!data.document}
-                className="flex-1 bg-orange-600 hover:bg-orange-700"
-              >
-                Añadir Documento
-              </BaseButton>
-              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
-                Cancelar
-              </BaseButton>
-            </div>
           </div>
         )
 
@@ -179,26 +205,33 @@ const SmartAttachmentsPanel = ({
               onChange={(e) => setData({...data, linkTitle: e.target.value})}
               className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <div className="flex gap-2">
-              <BaseButton
-                onClick={() => {
-                  onAttach({
-                    type: 'link', 
-                    content: data.link, 
-                    title: data.linkTitle || data.link
-                  })
-                  setActiveType(null)
-                  setData({})
-                }}
-                disabled={!data.link}
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
-              >
-                Añadir URL
-              </BaseButton>
-              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
-                Cancelar
-              </BaseButton>
-            </div>
+            {data.link && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    onAttach({
+                      type: 'link', 
+                      content: data.link, 
+                      title: data.linkTitle || data.link
+                    })
+                    setActiveType(null)
+                    setData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Añadir
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveType(null)
+                    setAttachmentData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm border border-gray-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         )
 
@@ -226,31 +259,38 @@ const SmartAttachmentsPanel = ({
               onChange={(e) => setData({...data, email: e.target.value})}
               className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
-            <div className="flex gap-2">
-              <BaseButton
-                onClick={() => {
-                  onAttach({
-                    type: 'contact',
-                    title: data.contactName,
-                    content: `${data.contactName}${data.phone ? '\n📞 ' + data.phone : ''}${data.email ? '\n📧 ' + data.email : ''}`,
-                    metadata: {
-                      name: data.contactName,
-                      phone: data.phone,
-                      email: data.email
-                    }
-                  })
-                  setActiveType(null)
-                  setData({})
-                }}
-                disabled={!data.contactName}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700"
-              >
-                Añadir Contacto
-              </BaseButton>
-              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
-                Cancelar
-              </BaseButton>
-            </div>
+            {data.contactName && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    onAttach({
+                      type: 'contact',
+                      title: data.contactName,
+                      content: `${data.contactName}${data.phone ? '\n📞 ' + data.phone : ''}${data.email ? '\n📧 ' + data.email : ''}`,
+                      metadata: {
+                        name: data.contactName,
+                        phone: data.phone,
+                        email: data.email
+                      }
+                    })
+                    setActiveType(null)
+                    setData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Añadir
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveType(null)
+                    setAttachmentData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm border border-gray-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         )
 
@@ -263,26 +303,33 @@ const SmartAttachmentsPanel = ({
               onChange={(e) => setData({...data, note: e.target.value})}
               className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-24 resize-none"
             />
-            <div className="flex gap-2">
-              <BaseButton
-                onClick={() => {
-                  onAttach({
-                    type: 'note',
-                    content: data.note,
-                    title: data.note.length > 30 ? data.note.substring(0, 30) + '...' : data.note
-                  })
-                  setActiveType(null)
-                  setData({})
-                }}
-                disabled={!data.note}
-                className="flex-1 bg-purple-600 hover:bg-purple-700"
-              >
-                Añadir Nota
-              </BaseButton>
-              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
-                Cancelar
-              </BaseButton>
-            </div>
+            {data.note && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    onAttach({
+                      type: 'note',
+                      content: data.note,
+                      title: data.note.length > 30 ? data.note.substring(0, 30) + '...' : data.note
+                    })
+                    setActiveType(null)
+                    setAttachmentData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Añadir
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveType(null)
+                    setAttachmentData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm border border-gray-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         )
 
@@ -315,33 +362,40 @@ const SmartAttachmentsPanel = ({
               onChange={(e) => setData({...data, description: e.target.value})}
               className="w-full px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             />
-            <div className="flex gap-2">
-              <BaseButton
-                onClick={() => {
-                  const currency = data.currency || 'EUR'
-                  const symbol = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : '£'
-                  onAttach({
-                    type: 'amount',
-                    title: `${data.amount}${symbol}${data.description ? ' - ' + data.description : ''}`,
-                    content: data.description || `Importe: ${data.amount} ${currency}`,
-                    metadata: {
-                      amount: parseFloat(data.amount),
-                      currency: currency,
-                      description: data.description
-                    }
-                  })
-                  setActiveType(null)
-                  setData({})
-                }}
-                disabled={!data.amount}
-                className="flex-1 bg-green-600 hover:bg-green-700"
-              >
-                Añadir Importe
-              </BaseButton>
-              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
-                Cancelar
-              </BaseButton>
-            </div>
+            {data.amount && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const currency = data.currency || 'EUR'
+                    const symbol = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : '£'
+                    onAttach({
+                      type: 'amount',
+                      title: `${data.amount}${symbol}${data.description ? ' - ' + data.description : ''}`,
+                      content: data.description || `Importe: ${data.amount} ${currency}`,
+                      metadata: {
+                        amount: parseFloat(data.amount),
+                        currency: currency,
+                        description: data.description
+                      }
+                    })
+                    setActiveType(null)
+                    setData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Añadir
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveType(null)
+                    setAttachmentData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm border border-gray-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         )
 
@@ -362,30 +416,37 @@ const SmartAttachmentsPanel = ({
               onChange={(e) => setData({...data, address: e.target.value})}
               className="w-full px-3 py-2 border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
             />
-            <div className="flex gap-2">
-              <BaseButton
-                onClick={() => {
-                  onAttach({
-                    type: 'location',
-                    title: data.locationName,
-                    content: `📍 ${data.locationName}${data.address ? '\n' + data.address : ''}`,
-                    metadata: {
-                      name: data.locationName,
-                      address: data.address
-                    }
-                  })
-                  setActiveType(null)
-                  setData({})
-                }}
-                disabled={!data.locationName}
-                className="flex-1 bg-red-600 hover:bg-red-700"
-              >
-                Añadir Ubicación
-              </BaseButton>
-              <BaseButton variant="ghost" onClick={() => setActiveType(null)}>
-                Cancelar
-              </BaseButton>
-            </div>
+            {data.locationName && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    onAttach({
+                      type: 'location',
+                      title: data.locationName,
+                      content: `📍 ${data.locationName}${data.address ? '\n' + data.address : ''}`,
+                      metadata: {
+                        name: data.locationName,
+                        address: data.address
+                      }
+                    })
+                    setActiveType(null)
+                    setData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Añadir
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveType(null)
+                    setAttachmentData({})
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm border border-gray-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         )
 
@@ -397,99 +458,48 @@ const SmartAttachmentsPanel = ({
   if (!isOpen) return null
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm mt-3 p-3 sm:p-4 space-y-3 sm:space-y-4 bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-blue-600">📎</span>
-          <span className="font-medium text-blue-900 text-sm sm:text-base">Añadir a tu tarea:</span>
-        </div>
-        <button 
-          onClick={onClose}
-          className="p-1 text-blue-400 hover:text-blue-600 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
-        >
-          ✕
-        </button>
-      </div>
+    <div className={`${isOpen ? 'mt-3' : ''} space-y-3`}>
 
       {!activeType ? (
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-          <button 
-            onClick={() => setActiveType('deadline')}
-            className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-orange-700 hover:bg-orange-50 border border-orange-200"
-          >
-            <span className="text-base sm:text-sm">📅</span>
-            <span className="hidden xs:inline sm:inline">Fecha límite</span>
-            <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Fecha límite</span>
-          </button>
-          <button 
-            onClick={() => setActiveType('link')}
-            className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-blue-700 hover:bg-blue-50 border border-blue-200"
-          >
-            <span className="text-base sm:text-sm">🔗</span>
-            <span className="hidden xs:inline sm:inline">Link</span>
-            <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Link</span>
-          </button>
-          <button 
-            onClick={() => setActiveType('amount')}
-            className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-green-700 hover:bg-green-50 border border-green-200"
-          >
-            <span className="text-base sm:text-sm">💰</span>
-            <span className="hidden xs:inline sm:inline">Importe</span>
-            <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Importe</span>
-          </button>
-          <button 
-            onClick={() => setActiveType('note')}
-            className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-purple-700 hover:bg-purple-50 border border-purple-200"
-          >
-            <span className="text-base sm:text-sm">📝</span>
-            <span className="hidden xs:inline sm:inline">Nota</span>
-            <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Nota</span>
-          </button>
-          <button 
-            onClick={() => setActiveType('image')}
-            className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-pink-700 hover:bg-pink-50 border border-pink-200"
-          >
-            <span className="text-base sm:text-sm">🖼️</span>
-            <span className="hidden xs:inline sm:inline">Imagen</span>
-            <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Imagen</span>
-          </button>
-          <button 
-            onClick={() => setActiveType('document')}
-            className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-orange-700 hover:bg-orange-50 border border-orange-200"
-          >
-            <span className="text-base sm:text-sm">📄</span>
-            <span className="hidden xs:inline sm:inline">Documento</span>
-            <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Documento</span>
-          </button>
-          <button 
-            onClick={() => setActiveType('location')}
-            className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-red-700 hover:bg-red-50 border border-red-200"
-          >
-            <span className="text-base sm:text-sm">📍</span>
-            <span className="hidden xs:inline sm:inline">Ubicación</span>
-            <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Ubicación</span>
-          </button>
-          <button 
-            onClick={() => setActiveType('contact')}
-            className="flex items-center justify-center sm:justify-start gap-1 px-2 sm:px-3 py-3 sm:py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white text-indigo-700 hover:bg-indigo-50 border border-indigo-200"
-          >
-            <span className="text-base sm:text-sm">👤</span>
-            <span className="hidden xs:inline sm:inline">Contacto</span>
-            <span className="block xs:hidden sm:hidden text-center text-xs mt-1">Contacto</span>
-          </button>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+          {attachmentTypes.map((type) => {
+            const IconComponent = type.icon
+            return (
+              <button 
+                key={type.id}
+                onClick={() => setActiveType(type.id)}
+                className={`flex items-center justify-center gap-1 px-1 sm:px-2 py-2 rounded-lg text-xs sm:text-sm transition-all min-h-[44px] touch-manipulation bg-white hover:bg-${type.color}-50 border border-${type.color}-200 text-${type.color}-700`}
+              >
+                <IconComponent size={14} className={`text-${type.color}-600 flex-shrink-0`} />
+                <span className="font-medium truncate">{type.label}</span>
+              </button>
+            )
+          })}
         </div>
       ) : (
         <div>
           <div className="flex items-center mb-4">
-            <button 
-              onClick={() => setActiveType(null)}
-              className="mr-2 text-blue-400 hover:text-blue-600"
-            >
-              ←
-            </button>
-            <h4 className="font-medium text-blue-900">
-              {attachmentTypes.find(t => t.id === activeType)?.label}
-            </h4>
+            {(() => {
+              const type = attachmentTypes.find(t => t.id === activeType)
+              const IconComponent = type?.icon
+              return (
+                <>
+                  <button 
+                    onClick={() => {
+                      setActiveType(null)
+                      setAttachmentData({})
+                    }}
+                    className={`mr-2 text-${type?.color}-500 hover:text-${type?.color}-700 p-1`}
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <h4 className={`font-medium text-${type?.color}-700 flex items-center gap-2 text-base`}>
+                    {IconComponent && <IconComponent size={16} className={`text-${type?.color}-600`} />}
+                    Añadir {type?.label}
+                  </h4>
+                </>
+              )
+            })()}
           </div>
           {renderAttachmentForm(activeType, attachmentData, setAttachmentData, onAttach)}
         </div>

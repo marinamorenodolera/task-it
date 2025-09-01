@@ -13,7 +13,7 @@ interface ClientRootLayoutProps {
 
 function BottomNavigationWrapper() {
   const { navigateToDaily } = useNavigation()
-  return <BottomNavigation onDailyNavigate={navigateToDaily} />
+  return <BottomNavigation />
 }
 
 export default function ClientRootLayout({ children }: ClientRootLayoutProps) {

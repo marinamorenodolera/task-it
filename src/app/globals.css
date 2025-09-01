@@ -125,7 +125,7 @@
 
   /* Fix button click issues on iOS */
   button:active {
-    transform: scale(0.98);
+    transform: scale(0.995);
   }
 
   /* Ensure forms work properly on mobile */
@@ -323,7 +323,7 @@ body {
   .task-card {
     @apply bg-surface-elevated border border-border rounded-card shadow-card;
     @apply transition-all duration-200 ease-in-out;
-    @apply hover:shadow-elevated hover:scale-[1.02];
+    @apply hover:shadow-elevated hover:scale-[1.005];
   }
   
   .priority-button {
@@ -365,7 +365,7 @@ body {
   }
   
   .task-card:active {
-    transform: scale(0.98);
+    transform: scale(0.995);
   }
 }
 

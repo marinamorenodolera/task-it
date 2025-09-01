@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import BaseCard from '../ui/BaseCard'
-import { Circle, CircleCheck, ChevronDown, ChevronUp } from 'lucide-react'
+import { Circle, CircleCheck, ChevronDown, ChevronUp, Check, Calendar, Clipboard, Paperclip, Euro } from 'lucide-react'
 import { useGestures } from '@/hooks/useGestures'
 
 const TaskCard = ({ 
@@ -19,7 +19,10 @@ const TaskCard = ({
   // ✅ NUEVOS PROPS PARA DRAG
   dragAttributes = {},
   dragListeners = {},
-  isDragging = false
+  isDragging = false,
+  // ✅ NUEVOS PROPS PARA SELECCIÓN
+  selectionMode = false,
+  isSelected = false
 }) => {
   const [isBeingReordered, setIsBeingReordered] = useState(false)
   const [checkboxPressed, setCheckboxPressed] = useState(false)
@@ -138,22 +141,28 @@ const TaskCard = ({
   // }
 
   return (
-    <div>
+    <div className="relative">
       <div
-        className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all touch-manipulation select-none user-select-none ${
+        className={`flex items-center gap-3 p-3 rounded-lg border transition-all touch-manipulation select-none user-select-none ${
           task.justCompleted 
             ? 'opacity-90' 
             : 'opacity-100'
-        } border-gray-200 hover:border-purple-200 ${
+        } ${
+          isSelected 
+            ? 'bg-purple-50 border-purple-300' 
+            : 'bg-white border-gray-200 hover:border-purple-200'
+        } ${
           isDragging 
             ? 'shadow-lg border-blue-300 cursor-grabbing' 
             : isBeingReordered 
-            ? 'scale-105 shadow-lg' 
+            ? 'shadow-lg' 
             : ''
         } ${
           isBeingReordered 
-            ? 'shadow-lg scale-105' 
-            : 'cursor-grab hover:shadow-md hover:scale-[1.02] hover:border-gray-300'
+            ? 'shadow-lg' 
+            : selectionMode 
+              ? 'cursor-pointer' 
+              : 'cursor-grab hover:shadow-md hover:scale-[1.005] hover:border-gray-300'
         }`}
         onClick={handleCardClick}
         // draggable={true}
@@ -165,6 +174,19 @@ const TaskCard = ({
         {...dragAttributes}
         {...dragListeners}
       >
+        {/* Selection Checkbox */}
+        {selectionMode && (
+          <div className="absolute top-2 right-2 z-10">
+            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+              isSelected 
+                ? 'bg-purple-500 border-purple-500' 
+                : 'bg-white border-gray-300'
+            }`}>
+              {isSelected && <Check size={14} className="text-white" />}
+            </div>
+          </div>
+        )}
+        
         <button 
           onPointerDown={(e) => {
             e.stopPropagation()
@@ -208,29 +230,29 @@ const TaskCard = ({
           
           {/* Badge de deadline */}
           {task.deadline && (
-            <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded-full flex-shrink-0">
-              📅 {task.deadlineDisplay || formatTaskDeadline(task.deadline)}
+            <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded-full flex-shrink-0 flex items-center justify-center gap-1">
+              <Calendar size={12} />{task.deadlineDisplay || formatTaskDeadline(task.deadline)}
             </span>
           )}
           
           {/* Contador de subtareas */}
           {hasSubtasks && (
-            <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full flex-shrink-0">
-              📋 {subtasks.length}
+            <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full flex-shrink-0 flex items-center justify-center gap-1">
+              <Clipboard size={12} />{subtasks.length}
             </span>
           )}
           
           {/* Contador de adjuntos */}
           {task.attachments && task.attachments.length > 0 && (
-            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full flex-shrink-0">
-              📎 {task.attachments.length}
+            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full flex-shrink-0 flex items-center justify-center gap-1">
+              <Paperclip size={12} />{task.attachments.length}
             </span>
           )}
 
           {/* Badge de amount */}
           {task.amount && (
-            <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full flex-shrink-0">
-              💰 {task.amount}€
+            <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full flex-shrink-0 flex items-center justify-center gap-1">
+              <Euro size={12} />{task.amount}€
             </span>
           )}
 

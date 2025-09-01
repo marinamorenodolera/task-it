@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Link, StickyNote, Image, FileText, Euro, MapPin, User, Paperclip, Eye, Download, ExternalLink } from 'lucide-react'
 
 const AttachmentItem = ({ attachment, onDelete }) => {
   const [showImageViewer, setShowImageViewer] = useState(false)
@@ -20,15 +20,15 @@ const AttachmentItem = ({ attachment, onDelete }) => {
   
   const getAttachmentIcon = (type) => {
     const icons = {
-      link: '🔗',
-      note: '📝',
-      image: '🖼️',
-      document: '📄',
-      amount: '💰',
-      location: '📍',
-      contact: '👤'
+      link: <Link size={16} />,
+      note: <StickyNote size={16} />,
+      image: <Image size={16} />,
+      document: <FileText size={16} />,
+      amount: <Euro size={16} />,
+      location: <MapPin size={16} />,
+      contact: <User size={16} />
     }
-    return icons[type] || '📎'
+    return icons[type] || <Paperclip size={16} />
   }
 
   const getAttachmentColor = (type) => {
@@ -158,7 +158,7 @@ const AttachmentItem = ({ attachment, onDelete }) => {
             onClick={() => setShowDocumentViewer(true)}
             className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
           >
-            📖
+            <Eye size={16} />
           </button>
         )}
         
@@ -171,7 +171,7 @@ const AttachmentItem = ({ attachment, onDelete }) => {
             download={attachment.file_name}
             className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
           >
-            ⬇️
+            <Download size={16} />
           </a>
         )}
         
@@ -184,7 +184,7 @@ const AttachmentItem = ({ attachment, onDelete }) => {
             className={`text-${color}-600 hover:text-${color}-800 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
             onClick={(e) => e.stopPropagation()}
           >
-            ↗️
+            <ExternalLink size={16} />
           </a>
         )}
         
@@ -258,7 +258,7 @@ const AttachmentItem = ({ attachment, onDelete }) => {
             
             <div className="space-y-4">
               <div className="flex items-center gap-3 p-4 bg-orange-50 rounded-lg">
-                <span className="text-orange-600 text-2xl">📄</span>
+                <FileText size={24} className="text-orange-600" />
                 <div>
                   <p className="font-medium text-gray-900">{attachment.title}</p>
                   <p className="text-sm text-gray-600">

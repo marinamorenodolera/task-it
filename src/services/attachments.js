@@ -202,8 +202,13 @@ export const attachmentService = {
   // Procesar y crear attachment (archivos y datos)
   async processAndCreateAttachment(attachmentData, userId, taskId) {
     try {
+      // Validar que attachmentData existe
+      if (!attachmentData) {
+        return { data: null, error: 'No se proporcionaron datos de attachment' }
+      }
+
       // Procesamos archivos con la estructura existente
-      if (attachmentData.file) {
+      if (attachmentData?.file) {
         const uploadResult = await this.uploadFile(attachmentData.file, userId, taskId)
         if (uploadResult.error) {
           return { data: null, error: uploadResult.error }

@@ -61,7 +61,7 @@ const TaskCard = ({
   return (
     <div 
       className={`
-        bg-white border border-gray-200 rounded-lg shadow-sm p-3 sm:p-4 min-h-[44px] cursor-pointer
+        bg-transparent border-0 rounded-lg shadow-sm p-2 sm:p-3 min-h-[44px] cursor-pointer
         transition-all duration-200 ease-in-out hover:shadow-md hover:scale-[1.005]
         ${isCompleted ? 'opacity-60' : ''}
         ${className}
@@ -77,7 +77,7 @@ const TaskCard = ({
       }}
       aria-label={`Tarea: ${task.title}`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {/* Complete Button */}
         <button 
           onClick={handleComplete}
@@ -113,7 +113,7 @@ const TaskCard = ({
         {/* Task Content */}
         <div className="flex-1 min-w-0">
           <h3 className={`
-            font-medium truncate text-sm sm:text-base
+            font-normal truncate text-sm sm:text-base
             ${isCompleted 
               ? 'line-through text-gray-500' 
               : 'text-gray-900'

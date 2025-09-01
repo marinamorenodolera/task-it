@@ -143,14 +143,14 @@ const TaskCard = ({
   return (
     <div className="relative">
       <div
-        className={`flex items-center gap-3 p-3 rounded-lg border transition-all touch-manipulation select-none user-select-none ${
+        className={`flex items-center gap-2 p-2 rounded-lg border transition-all touch-manipulation select-none user-select-none ${
           task.justCompleted 
             ? 'opacity-90' 
             : 'opacity-100'
         } ${
           isSelected 
             ? 'bg-purple-50 border-purple-300' 
-            : 'bg-white border-gray-200 hover:border-purple-200'
+            : 'bg-transparent border-0 hover:bg-gray-50/30'
         } ${
           isDragging 
             ? 'shadow-lg border-blue-300 cursor-grabbing' 
@@ -162,7 +162,7 @@ const TaskCard = ({
             ? 'shadow-lg' 
             : selectionMode 
               ? 'cursor-pointer' 
-              : 'cursor-grab hover:shadow-md hover:scale-[1.005] hover:border-gray-300'
+              : 'cursor-grab hover:shadow-md hover:scale-[1.005]'
         }`}
         onClick={handleCardClick}
         // draggable={true}
@@ -180,7 +180,7 @@ const TaskCard = ({
             <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
               isSelected 
                 ? 'bg-purple-500 border-purple-500' 
-                : 'bg-white border-gray-300'
+                : 'bg-transparent border-0'
             }`}>
               {isSelected && <Check size={14} className="text-white" />}
             </div>
@@ -219,7 +219,7 @@ const TaskCard = ({
         </button>
         
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-900">
+          <span className="text-sm font-normal text-gray-900">
             {task.title}
           </span>
           

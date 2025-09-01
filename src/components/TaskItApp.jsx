@@ -1,14 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { 
   Plus, 
-  Mic, 
-  MicOff, 
+ 
   CheckCircle2,
   Circle,
   Target,
   Zap,
   Activity,
-  MessageSquare,
   Star,
   Calendar,
   Link,
@@ -35,6 +33,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { useActivities } from '@/hooks/useActivities'
 import { useNavigation } from '@/hooks/useNavigation'
 import { parseNaturalLanguage, formatDeadline } from '@/utils/dateHelpers'
+import { triggerHapticFeedback } from '@/utils/haptics'
 
 import TaskSelector from '@/components/tasks/TaskSelector'
 import RitualsConfig from '@/components/rituals/RitualsConfig'
@@ -66,6 +65,7 @@ import {
 } from '@dnd-kit/sortable'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import SortableTaskCard from '@/components/tasks/SortableTaskCard'
+import ActivityModal from '@/components/activities/ActivityModal'
 
 const TaskItApp = () => {
   const { user, loading, signOut } = useAuth()
@@ -227,6 +227,9 @@ const TaskItApp = () => {
             )}
           </h2>
           
+          {/* Section divider after header */}
+          <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+          
           {/* Empty state con mensaje para drag */}
           {dragOverSection === section.id && draggedTask && (
             <div className="text-center py-4 text-blue-600">
@@ -259,23 +262,11 @@ const TaskItApp = () => {
           )}
         </h2>
         
-        {section.id === 'urgent' && (
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas que requieren atención inmediata y máxima prioridad.
-          </p>
-        )}
         
-        {section.id === 'en_espera' && (
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas iniciadas esperando respuesta o feedback externo.
-          </p>
-        )}
         
-        {section.id === 'otras_tareas' && (
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas creadas rápidas. Selecciona las más importantes para Big 3.
-          </p>
-        )}
+        
+        {/* Section divider after header/description, before tasks */}
+        <div className="border-b border-gray-200/30 mx-0 my-3"></div>
         
         <div className="space-y-2">
           {sectionTasks.map((task) => (
@@ -325,6 +316,9 @@ const TaskItApp = () => {
               <span className="text-xs text-gray-500 font-normal">Reset: 6:00 AM</span>
             </h2>
           </div>
+          
+          {/* Section divider after header */}
+          <div className="border-b border-gray-200/30 mx-0 my-3"></div>
           
           <div className="space-y-2">
             {rituals.map((ritual) => (
@@ -400,84 +394,6 @@ const TaskItApp = () => {
       )
     }
 
-    // Caso especial para actividades
-    if (section.id === 'activities') {
-      return (
-        <div key={section.id}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              {renderSectionIconLocal('activities')}
-              {section.name} ({todayActivities?.length || 0})
-            </h2>
-            <button
-              onClick={() => setShowActivityForm(true)}
-              className="px-3 py-1 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              + Añadir
-            </button>
-          </div>
-          
-          <div className="space-y-2">
-            {todayActivities && todayActivities.length > 0 ? (
-              todayActivities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900">
-                        {activity.type}
-                      </span>
-                      <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
-                        {activity.duration} min
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {activity.time}
-                      </span>
-                    </div>
-                    {activity.notes && (
-                      <p className="text-xs text-gray-600 mt-1">{activity.notes}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => deleteActivity(activity.id)}
-                    className="text-red-400 hover:text-red-600 transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-gray-500 text-center py-4">
-                No hay actividades registradas hoy
-              </p>
-            )}
-          </div>
-
-          {/* Quick activity buttons */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {predefinedActivities?.slice(0, 4).map((activity) => (
-              <button
-                key={activity.id}
-                onClick={() => {
-                  addActivity({
-                    type: activity.type,
-                    duration: activity.duration,
-                    notes: activity.notes || '',
-                    date: new Date().toISOString().split('T')[0],
-                    time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-                  })
-                }}
-                className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
-              >
-                {activity.type} {activity.duration}min
-              </button>
-            ))}
-          </div>
-        </div>
-      )
-    }
 
     // Caso especial para tareas completadas
     if (section.id === 'completadas') {
@@ -510,10 +426,13 @@ const TaskItApp = () => {
             )}
           </div>
           
+          {/* Section divider */}
+          <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+          
           {showCompletedTasks && (
             <div className="space-y-2">
               {allCompletedItems.map((item, index) => (
-                <div key={`completed-${item.id}-${index}`} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all cursor-pointer"
+                <div key={`completed-${item.id}-${index}`} className="flex items-center gap-2 p-2 bg-transparent border-0 opacity-60 rounded-lg hover:bg-gray-50/30 transition-all cursor-pointer"
                   onClick={() => {
                     if (item.type === 'task' || !item.type) {
                       toggleTaskComplete(item.id)
@@ -561,32 +480,15 @@ const TaskItApp = () => {
           {section.id === 'big_three' && '/3'}
         </h2>
         
-        {section.id === 'urgent' && (
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas que requieren atención inmediata y máxima prioridad.
-          </p>
-        )}
         
-        {section.id === 'en_espera' && (
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas iniciadas esperando respuesta o feedback externo.
-          </p>
-        )}
         
-        {section.id === 'otras_tareas' && (
-          <p className="text-sm text-gray-600 mb-3">
-            Tareas creadas rápidas. Selecciona las más importantes para Big 3.
-          </p>
-        )}
       </div>
     )
   }
   
   // Local state
   const [quickCapture, setQuickCapture] = useState('')
-  const [isListening, setIsListening] = useState(false)
-  const [organizingMode, setOrganizingMode] = useState(false)
-  const [voiceCommand, setVoiceCommand] = useState('')
+  const [showActivityModal, setShowActivityModal] = useState(false)
   const [selectedTask, setSelectedTask] = useState(null)
   const [selectedActivity, setSelectedActivity] = useState(null)
   const [showQuickOptions, setShowQuickOptions] = useState(false)
@@ -627,21 +529,19 @@ const TaskItApp = () => {
   const [activeId, setActiveId] = useState(null)
   const [draggedTask, setDraggedTask] = useState(null)
 
-  // Voice recognition setup
-  const recognition = useRef(null)
-  const [voiceSupported, setVoiceSupported] = useState(false)
   
   // ✅ DRAG AND DROP SENSORS
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Más tolerancia para mobile
+        delay: 500,      // Desktop más rápido que mobile
+        tolerance: 5,
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 250,
-        tolerance: 5,
+        delay: 750,      // 750ms = long press claro
+        tolerance: 8,    // Más tolerancia para mobile
       },
     }),
     useSensor(KeyboardSensor, {
@@ -665,33 +565,6 @@ const TaskItApp = () => {
       checkDailyReset()
     }
     
-    // Check if browser supports speech recognition
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-      recognition.current = new SpeechRecognition()
-      recognition.current.continuous = false
-      recognition.current.interimResults = false
-      recognition.current.lang = 'es-ES'
-      
-      recognition.current.onresult = (event) => {
-        const command = event.results[0][0].transcript
-        setVoiceCommand(command)
-        setQuickCapture(command)
-        setIsListening(false)
-        setOrganizingMode(false)
-      }
-
-      recognition.current.onerror = () => {
-        setIsListening(false)
-        setOrganizingMode(false)
-      }
-
-      recognition.current.onend = () => {
-        setIsListening(false)
-      }
-
-      setVoiceSupported(true)
-    }
   }, [])
 
   // Enhanced Quick Capture
@@ -822,6 +695,14 @@ const TaskItApp = () => {
     }
   }
 
+  // Helper function to blur input and hide keyboard
+  const blurQuickCaptureInput = () => {
+    const quickCaptureInput = document.querySelector('input[placeholder*="Llamar cliente"]')
+    if (quickCaptureInput) {
+      quickCaptureInput.blur()
+    }
+  }
+
   const addQuickTask = async () => {
     if (quickCapture.trim()) {
       const { deadline, amount } = parseNaturalLanguage(quickCapture)
@@ -866,6 +747,9 @@ const TaskItApp = () => {
         setSelectedSection('otras_tareas') // Reset to default
         setShouldAutoFocus(false) // Resetear autoFocus después de crear tarea
         
+        // ✅ HIDE KEYBOARD after task creation (mobile UX)
+        blurQuickCaptureInput()
+        
         // Ocultar modal después de 1.5 segundos
         setTimeout(() => {
           setShowTaskCreatedModal(false)
@@ -876,36 +760,6 @@ const TaskItApp = () => {
     }
   }
 
-  const startVoiceCapture = async () => {
-    if (!voiceSupported) {
-      alert('Tu navegador no soporta reconocimiento de voz')
-      return
-    }
-
-    try {
-      // Request microphone permission
-      await navigator.mediaDevices.getUserMedia({ audio: true })
-      
-      setIsListening(true)
-      setOrganizingMode(true)
-      setVoiceCommand('')
-      
-      recognition.current.start()
-    } catch (error) {
-      console.error('Error accessing microphone:', error)
-      alert('No se pudo acceder al micrófono. Verifica los permisos.')
-      setIsListening(false)
-      setOrganizingMode(false)
-    }
-  }
-
-  const stopVoiceCapture = () => {
-    if (recognition.current) {
-      recognition.current.stop()
-    }
-    setIsListening(false)
-    setOrganizingMode(false)
-  }
 
   const toggleTaskComplete = async (id) => {
     try {
@@ -927,6 +781,7 @@ const TaskItApp = () => {
 
   // ✅ DRAG HANDLERS - INSPIRADOS EN WEEKLY SYSTEM
   const handleDragStart = (event) => {
+    triggerHapticFeedback('medium')  // Vibración al activar drag
     const { active } = event
     setActiveId(active.id)
     
@@ -1252,7 +1107,17 @@ const TaskItApp = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div 
+      className="min-h-screen bg-white"
+      onClick={(e) => {
+        // Hide keyboard when clicking outside the quick capture input
+        if (!e.target.closest('input[placeholder*="Llamar cliente"]') && 
+            !e.target.closest('.quick-capture-form') &&
+            !e.target.closest('button[type="submit"]')) {
+          blurQuickCaptureInput()
+        }
+      }}
+    >
       {/* ✅ ELIMINADO - clases CSS de navegación innecesarias */}
       {/* Header Móvil */}
       <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
@@ -1283,7 +1148,7 @@ const TaskItApp = () => {
               e.stopPropagation();
               addQuickTask(); 
             }} 
-            className="flex gap-2"
+            className="flex gap-2 quick-capture-form"
           >
             <input
               type="text"
@@ -1299,6 +1164,18 @@ const TaskItApp = () => {
               }}
               onClick={() => {
                 setShouldAutoFocus(true) // Usuario hace click para crear tarea
+              }}
+              onKeyDown={(e) => {
+                // Hide keyboard on Escape key
+                if (e.key === 'Escape') {
+                  blurQuickCaptureInput()
+                  setQuickCapture('')
+                  setShouldAutoFocus(false)
+                }
+              }}
+              onBlur={() => {
+                // Clear shouldAutoFocus when input loses focus
+                setShouldAutoFocus(false)
               }}
               className="flex-1 min-h-[60px] touch-manipulation px-4 py-4 text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               autoFocus={shouldAutoFocus}
@@ -1319,70 +1196,116 @@ const TaskItApp = () => {
             </BaseButton>
           </form>
 
-          {/* Quick Actions */}
+          {/* Enhanced Quick Actions - Modern Card Design */}
           {quickCapture.trim() && (
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                {/* Section Selector */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedSection('big_three')}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] ${
-                      selectedSection === 'big_three'
-                        ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
-                        : 'bg-gray-100 text-gray-600 hover:bg-yellow-50'
-                    }`}
-                  >
-                    <Star size={14} />
-                    Big 3
-                  </button>
-                  
-                  <button
-                    onClick={() => setSelectedSection('urgent')}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] ${
-                      selectedSection === 'urgent'
-                        ? 'bg-red-100 text-red-700 border border-red-300'
-                        : 'bg-gray-100 text-gray-600 hover:bg-red-50'
-                    }`}
-                  >
-                    <Flame size={14} />
-                    Urgente
-                  </button>
-                  
-                  <button
-                    onClick={() => setSelectedSection('en_espera')}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] ${
-                      selectedSection === 'en_espera'
-                        ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                        : 'bg-gray-100 text-gray-600 hover:bg-orange-50'
-                    }`}
-                  >
-                    <Clock size={14} />
-                    En Espera
-                  </button>
-                </div>
+            <div className="space-y-3">
+              {/* Section Selector - Compact Modern Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                <button
+                  onClick={() => setSelectedSection(
+                    selectedSection === 'big_three' ? 'otras_tareas' : 'big_three'
+                  )}
+                  className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                    selectedSection === 'big_three'
+                      ? 'border-yellow-300 ring-2 ring-yellow-200 bg-yellow-50'
+                      : 'border-gray-200 hover:border-yellow-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Star 
+                      className={`${
+                        selectedSection === 'big_three' ? 'text-yellow-600' : 'text-yellow-500'
+                      }`}
+                      size={16}
+                      fill={selectedSection === 'big_three' ? 'currentColor' : 'none'}
+                    />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Big 3</span>
+                  </div>
+                </button>
                 
-                {/* Attachments Button */}
+                <button
+                  onClick={() => setSelectedSection(
+                    selectedSection === 'urgent' ? 'otras_tareas' : 'urgent'
+                  )}
+                  className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                    selectedSection === 'urgent'
+                      ? 'border-red-300 ring-2 ring-red-200 bg-red-50'
+                      : 'border-gray-200 hover:border-red-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Flame 
+                      className={`${
+                        selectedSection === 'urgent' ? 'text-red-600' : 'text-red-500'
+                      }`}
+                      size={16}
+                    />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Urgente</span>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => setSelectedSection(
+                    selectedSection === 'en_espera' ? 'otras_tareas' : 'en_espera'
+                  )}
+                  className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                    selectedSection === 'en_espera'
+                      ? 'border-orange-300 ring-2 ring-orange-200 bg-orange-50'
+                      : 'border-gray-200 hover:border-orange-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Clock 
+                      className={`${
+                        selectedSection === 'en_espera' ? 'text-orange-600' : 'text-orange-500'
+                      }`}
+                      size={16}
+                    />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">En Espera</span>
+                  </div>
+                </button>
+                
+                {/* Attachments Card */}
                 {!showAttachments && (
                   <button
                     onClick={() => setShowAttachments(true)}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] ${
+                    className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
                       attachments.length > 0 || taskDeadline
-                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        ? 'border-blue-300 ring-2 ring-blue-200 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-200'
                     }`}
                   >
-                    <Link size={14} />
-                    <span>
-                      Adjuntos
-                      {(attachments.length > 0 || taskDeadline) && (
-                        <span className="ml-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full">
-                          {attachments.length + (taskDeadline ? 1 : 0)}
-                        </span>
-                      )}
-                    </span>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <Link 
+                        className={`${
+                          attachments.length > 0 || taskDeadline ? 'text-blue-600' : 'text-blue-500'
+                        }`}
+                        size={16}
+                      />
+                      <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Adjuntos</span>
+                    </div>
                   </button>
                 )}
+                
+                {/* Otras Tareas (Default) Button */}
+                <button
+                  onClick={() => setSelectedSection('otras_tareas')}
+                  className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                    selectedSection === 'otras_tareas'
+                      ? 'border-blue-300 ring-2 ring-blue-200 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Folder 
+                      className={`${
+                        selectedSection === 'otras_tareas' ? 'text-blue-600' : 'text-blue-500'
+                      }`}
+                      size={16}
+                    />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Otras</span>
+                  </div>
+                </button>
               </div>
               
               {/* Attachments Preview */}
@@ -1491,7 +1414,7 @@ const TaskItApp = () => {
           )}
         </div>
 
-        {/* Voice Capture */}
+        {/* Activity & Task Management */}
         <div className="flex gap-2 mt-3">
           <button
             onClick={() => {
@@ -1515,53 +1438,29 @@ const TaskItApp = () => {
           </button>
           
           <button
-            onClick={isListening ? stopVoiceCapture : startVoiceCapture}
+            onClick={() => setShowActivityModal(true)}
             className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] rounded-lg transition-all touch-manipulation ${
-              isListening 
-                ? 'bg-red-100 text-red-700 animate-pulse' 
-                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+              activityStats.totalTimeToday > 0 
+                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 ring-2 ring-purple-300' 
+                : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
             }`}
           >
-            {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+            {activityStats.totalTimeToday > 0 ? (
+              <Trophy size={16} className="text-purple-700" />
+            ) : (
+              <Activity size={16} />
+            )}
             <span className="text-xs sm:text-sm font-medium">
-              {isListening ? 'Escuchando...' : 'Voz'}
+              {activityStats.totalTimeToday > 0 ? (
+                <><span className="hidden sm:inline">Actividad </span><span className="font-bold text-purple-700">{activityStats.totalTimeToday}min<span className="hidden sm:inline"> conseguidos</span>!</span></>
+              ) : (
+                'Actividad'
+              )}
             </span>
           </button>
         </div>
-
-        {/* Voice Command Feedback */}
-        {organizingMode && voiceCommand && (
-          <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center gap-2 text-blue-700">
-              <MessageSquare size={16} />
-              <span className="text-sm font-medium">Comando capturado:</span>
-            </div>
-            <p className="text-sm text-blue-600 mt-1">"{voiceCommand}"</p>
-          </div>
-        )}
       </div>
 
-      {/* Enhanced Stats */}
-      <div className="p-3 sm:p-4 bg-white mx-3 sm:mx-4 mt-4 rounded-xl border border-gray-200">
-        <div className="grid grid-cols-4 gap-2 sm:gap-3 text-center">
-          <div>
-            <div className="text-lg sm:text-xl font-bold text-blue-600">{totalTasks}</div>
-            <div className="text-xs text-gray-600">Total Tareas</div>
-          </div>
-          <div>
-            <div className="text-lg sm:text-xl font-bold text-green-600">{completedTasksCount}</div>
-            <div className="text-xs text-gray-600">Tareas Hechas</div>
-          </div>
-          <div>
-            <div className="text-lg sm:text-xl font-bold text-purple-600">{completedRituals}/{totalRituals}</div>
-            <div className="text-xs text-gray-600">Rituales</div>
-          </div>
-          <div>
-            <div className="text-lg sm:text-xl font-bold text-orange-600">{activityStats.totalTimeToday}min</div>
-            <div className="text-xs text-gray-600">Actividad</div>
-          </div>
-        </div>
-      </div>
 
       {/* Lista de Tareas */}
       <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
@@ -1606,6 +1505,16 @@ const TaskItApp = () => {
           currentBig3={importantTasks}
         />
       )}
+
+      {/* Activity Modal */}
+      <ActivityModal
+        isOpen={showActivityModal}
+        onClose={() => setShowActivityModal(false)}
+        predefinedActivities={predefinedActivities}
+        todayActivities={todayActivities}
+        stats={activityStats}
+        onAddActivity={addActivity}
+      />
 
       {/* Settings Modal */}
       {showSettingsModal && (

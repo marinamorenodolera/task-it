@@ -3,11 +3,32 @@
 import React, { useState, useEffect } from 'react'
 import { useTasks } from '@/hooks/useTasks'
 import { useAuth } from '@/hooks/useAuth'
-import { Plus, Calendar, Clock, Trash2, Target, CheckCircle2, Circle, Star, Flame, Folder, Settings, ListTodo, Mic, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Calendar, Clock, Trash2, Target, CheckCircle2, Circle, Star, Flame, Folder, Settings, ListTodo, Mic, ChevronUp, ChevronDown, Check, X } from 'lucide-react'
 import TaskCard from '@/components/tasks/TaskCard'
+import SortableTaskCard from '@/components/tasks/SortableTaskCard'
 import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
 import SmartAttachmentsPanel from '@/components/attachments/SmartAttachmentsPanel'
 import { formatDeadline, parseNaturalLanguage } from '@/utils/dateHelpers'
+import { triggerHapticFeedback } from '@/utils/haptics'
+
+// ✅ DND-KIT IMPORTS - IDENTICAL TO DAILY
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 
 export default function SemanalPage() {
   const { signOut } = useAuth()
@@ -36,17 +57,38 @@ export default function SemanalPage() {
   const [selectedDay, setSelectedDay] = useState('')
   const [selectedTask, setSelectedTask] = useState<any>(null)
   const [showTaskDetail, setShowTaskDetail] = useState(false)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([])
+  const [showMoveModal, setShowMoveModal] = useState(false)
   const [expandedTasks, setExpandedTasks] = useState<string[]>([])
   const [showCompletedTasks, setShowCompletedTasks] = useState(true)
   const [showAttachments, setShowAttachments] = useState(false)
   const [attachments, setAttachments] = useState<any[]>([])
   const [taskDeadline, setTaskDeadline] = useState('')
   
-  // Estado para drag & drop
+  // ✅ DND-KIT STATE - IDENTICAL TO DAILY
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [draggedTask, setDraggedTask] = useState<any>(null)
   const [dragOverDay, setDragOverDay] = useState<string | null>(null)
-  const [touchStartPos, setTouchStartPos] = useState({ x: 0, y: 0 })
-  const [isDraggingTouch, setIsDraggingTouch] = useState(false)
+  
+  // ✅ DND-KIT SENSORS - IDENTICAL TO DAILY
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 500,      // Desktop más rápido que mobile
+        tolerance: 5,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 750,      // 750ms = long press claro
+        tolerance: 8,    // Más tolerancia para mobile
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   // Función para calcular los próximos 5 días laborales desde hoy
   const getWorkDaysFromToday = () => {
@@ -287,148 +329,97 @@ export default function SemanalPage() {
     setShowTaskDetail(true)
   }
 
-  // Funciones drag & drop
-  const handleDragStart = (e: React.DragEvent, task: any) => {
+  // ✅ DND-KIT HANDLERS - IDENTICAL TO DAILY
+  const handleDragStart = (event: any) => {
+    triggerHapticFeedback('medium')  // Vibración al activar drag
+    const { active } = event
+    setActiveId(active.id)
+    
+    // Extract the taskId from the composite ID (day-taskId)
+    const taskId = active.id.split('-').slice(1).join('-')
+    
+    // Find the task being dragged
+    const task = tasks.find((t: any) => t.id === taskId)
     setDraggedTask(task)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', task.id)
-    
-    // Agregar clase visual al elemento arrastrado
-    const target = e.currentTarget as HTMLElement
-    target.style.opacity = '0.5'
   }
 
-  const handleDragEnd = (e: React.DragEvent) => {
-    const target = e.currentTarget as HTMLElement
-    target.style.opacity = '1'
-    setDraggedTask(null)
-    setDragOverDay(null)
-  }
-
-  const handleDragOver = (e: React.DragEvent, dayDateString: string) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
+  const handleDragOver = (event: any) => {
+    const { over } = event
     
-    // Solo marcar como hover si no es el día actual de la tarea
-    if (draggedTask && draggedTask.scheduled_date !== dayDateString) {
-      setDragOverDay(dayDateString)
-    }
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX
-    const y = e.clientY
-    
-    // Solo limpiar hover si realmente salió del área
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+    if (!over || !draggedTask) {
       setDragOverDay(null)
-    }
-  }
-
-  const handleDrop = async (e: React.DragEvent, dayDateString: string) => {
-    e.preventDefault()
-    setDragOverDay(null)
-    
-    if (!draggedTask) return
-    
-    // No hacer nada si es el mismo día
-    if (draggedTask.scheduled_date === dayDateString) return
-    
-    console.log('📦 Moviendo tarea:', {
-      taskId: draggedTask.id,
-      fromDay: draggedTask.scheduled_date,
-      toDay: dayDateString
-    })
-    
-    try {
-      const result = await updateTask(draggedTask.id, {
-        scheduled_date: dayDateString
-      })
-      
-      if (result && !result.error) {
-        console.log('✅ Tarea movida exitosamente')
-      } else {
-        console.error('❌ Error moviendo tarea:', result?.error)
-        alert('Error al mover la tarea')
-      }
-    } catch (error) {
-      console.error('❌ Error en drag & drop:', error)
-      alert('Error al mover la tarea')
-    }
-    
-    setDraggedTask(null)
-  }
-
-  // Touch events para móvil
-  const handleTouchStart = (e: React.TouchEvent, task: any) => {
-    const touch = e.touches[0]
-    setTouchStartPos({ x: touch.clientX, y: touch.clientY })
-    setDraggedTask(task)
-    setIsDraggingTouch(false)
-  }
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!draggedTask) return
-    
-    const touch = e.touches[0]
-    const deltaX = Math.abs(touch.clientX - touchStartPos.x)
-    const deltaY = Math.abs(touch.clientY - touchStartPos.y)
-    
-    // Activar drag si se movió lo suficiente
-    if (deltaX > 10 || deltaY > 10) {
-      setIsDraggingTouch(true)
-      e.preventDefault()
-      
-      // Encontrar elemento debajo del dedo
-      const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY)
-      const daySection = elementBelow?.closest('[data-day]')
-      
-      if (daySection) {
-        const dayDateString = daySection.getAttribute('data-day')
-        if (dayDateString && draggedTask.scheduled_date !== dayDateString) {
-          setDragOverDay(dayDateString)
-        }
-      } else {
-        setDragOverDay(null)
-      }
-    }
-  }
-
-  const handleTouchEnd = async (e: React.TouchEvent) => {
-    if (!isDraggingTouch || !draggedTask || !dragOverDay) {
-      setDraggedTask(null)
-      setDragOverDay(null)
-      setIsDraggingTouch(false)
       return
     }
+
+    const overId = over.id
+    const draggedDay = draggedTask.scheduled_date
+
+    // Detect if we're over a different day
+    if (overId !== draggedDay) {
+      setDragOverDay(overId)
+    } else {
+      setDragOverDay(null)
+    }
+  }
+
+  const handleDragEnd = async (event: any) => {
+    const { active, over } = event
     
-    // Mover la tarea
-    console.log('📱 Touch drop:', {
+    setActiveId(null)
+    setDraggedTask(null)
+    setDragOverDay(null)
+
+    if (!over || !draggedTask) return
+
+    const targetDay = over.id
+    const sourceDay = draggedTask.scheduled_date
+
+    // Don't do anything if it's the same day
+    if (sourceDay === targetDay) return
+
+    console.log('📦 Moving task:', {
       taskId: draggedTask.id,
-      fromDay: draggedTask.scheduled_date,
-      toDay: dragOverDay
+      from: sourceDay,
+      to: targetDay
     })
-    
+
     try {
       const result = await updateTask(draggedTask.id, {
-        scheduled_date: dragOverDay
+        scheduled_date: targetDay
       })
       
       if (result && !result.error) {
-        console.log('✅ Tarea movida exitosamente (touch)')
+        console.log('✅ Task moved successfully')
       } else {
-        console.error('❌ Error moviendo tarea (touch):', result?.error)
+        console.error('❌ Error moving task:', result?.error)
         alert('Error al mover la tarea')
       }
     } catch (error) {
-      console.error('❌ Error en touch drag & drop:', error)
+      console.error('❌ Error in drag & drop:', error)
       alert('Error al mover la tarea')
     }
+  }
+
+
+  // ✅ DROPPABLE COMPONENT FOR EACH DAY - IDENTICAL TO DAILY  
+  const DroppableDay = ({ dayDateString, children }: { dayDateString: string; children: React.ReactNode }) => {
+    const { setNodeRef, isOver } = useDroppable({
+      id: dayDateString
+    })
     
-    setDraggedTask(null)
-    setDragOverDay(null)
-    setIsDraggingTouch(false)
+    return (
+      <div 
+        ref={setNodeRef}
+        data-day={dayDateString}
+        className={`transition-all duration-200 rounded-lg p-2 min-h-[60px] ${
+          isOver || dragOverDay === dayDateString
+            ? 'bg-blue-50 ring-2 ring-blue-300 ring-opacity-50' 
+            : ''
+        }`}
+      >
+        {children}
+      </div>
+    )
   }
 
   // Cerrar detalle
@@ -486,7 +477,20 @@ export default function SemanalPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      modifiers={[restrictToVerticalAxis]}
+      accessibility={{
+        screenReaderInstructions: {
+          draggable: 'Para mover entre días, mantén presionado y arrastra'
+        }
+      }}
+    >
+      <div className="min-h-screen bg-white">
       {/* Header Móvil - Consistente con Daily */}
       <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-4">
@@ -574,10 +578,11 @@ export default function SemanalPage() {
             existingAttachments={[]}
           />
           
-          {/* Selector de días con estilo de botones Daily */}
-          <div className="flex gap-2">
-            {workDays.map(day => (
-              <button
+          {/* Selector de días con estilo de botones Daily - solo cuando escribes */}
+          {newTaskTitle.trim() && (
+            <div className="flex gap-2">
+              {workDays.map(day => (
+                <button
                 key={day.dateString}
                 onClick={() => setSelectedDay(day.dateString)}
                 className={`flex-1 flex items-center justify-center gap-1 px-2 py-2 min-h-[36px] rounded-lg transition-colors touch-manipulation ${
@@ -590,33 +595,54 @@ export default function SemanalPage() {
                 <Calendar size={14} className={selectedDay === day.dateString ? 'text-blue-700' : 'text-gray-600'} />
                 <span className="text-xs font-medium">{day.shortName}</span>
                 {day.isToday && <span className="text-[10px] bg-green-200 px-1 rounded">HOY</span>}
-              </button>
-            ))}
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {/* Gestionar tareas button - copied from daily */}
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => {
+                if (selectionMode) {
+                  setSelectionMode(false)
+                  setSelectedTasks([])
+                } else {
+                  setSelectionMode(true)
+                }
+              }}
+              className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] rounded-lg transition-colors touch-manipulation ${
+                selectionMode 
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200' 
+                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+              }`}
+            >
+              <Target size={16} className={selectionMode ? "text-red-700" : "text-green-700"} />
+              <span className="text-xs sm:text-sm font-medium">
+                {selectionMode ? 'Cancelar' : <><span className="hidden sm:inline">Gestionar </span>Tareas</>}
+              </span>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Lista de Secciones por día - Diseño idéntico a Daily */}
       <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
-        {workDays.map(day => {
+        <SortableContext 
+          items={tasks
+            .filter((t: any) => t?.page === 'weekly' && !t?.completed)
+            .map((task: any) => `${task.scheduled_date}-${task.id}`)
+          }
+          strategy={verticalListSortingStrategy}
+        >
+          {workDays.map(day => {
           const dayTasks = getTasksForDay(day.dateString)
           const DayIcon = getDayIcon(day.dayName)
           
           // Solo mostrar secciones con tareas o el día seleccionado
           if (dayTasks.length === 0 && selectedDay !== day.dateString) {
             return (
-              <div 
-                key={day.dateString}
-                data-day={day.dateString}
-                onDragOver={(e) => handleDragOver(e, day.dateString)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, day.dateString)}
-                className={`transition-all duration-200 rounded-lg p-2 min-h-[60px] ${
-                  dragOverDay === day.dateString 
-                    ? 'bg-blue-50 ring-2 ring-blue-300 ring-opacity-50' 
-                    : ''
-                }`}
-              >
+              <DroppableDay key={day.dateString} dayDateString={day.dateString}>
                 <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <DayIcon size={20} className={getDayColor(day.dayName)} />
                   {day.dayNameCapitalized} {day.dayNumber}
@@ -629,23 +655,15 @@ export default function SemanalPage() {
                     </span>
                   )}
                 </h2>
-              </div>
+                
+                {/* Section divider for empty day */}
+                <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+              </DroppableDay>
             )
           }
           
           return (
-            <div 
-              key={day.dateString} 
-              data-day={day.dateString}
-              onDragOver={(e) => handleDragOver(e, day.dateString)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, day.dateString)}
-              className={`transition-all duration-200 rounded-lg p-2 ${
-                dragOverDay === day.dateString 
-                  ? 'bg-blue-50 ring-2 ring-blue-300 ring-opacity-50' 
-                  : ''
-              }`}
-            >
+            <DroppableDay key={day.dateString} dayDateString={day.dateString}>
               <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <DayIcon size={20} className={getDayColor(day.dayName)} />
                 {day.dayNameCapitalized} {day.dayNumber}
@@ -658,6 +676,9 @@ export default function SemanalPage() {
                   </span>
                 )}
               </h2>
+              
+              {/* Section divider for day with tasks */}
+              <div className="border-b border-gray-200/30 mx-0 my-3"></div>
               
               {/* Descripción opcional para días especiales */}
               {day.isToday && dayTasks.length === 0 && (
@@ -688,73 +709,46 @@ export default function SemanalPage() {
                     </div>
                   )
                 ) : (
-                  dayTasks.map(task => (
-                    <div
-                      key={task.id}
-                      draggable={true}
-                      onDragStart={(e) => handleDragStart(e, task)}
-                      onDragEnd={handleDragEnd}
-                      onTouchStart={(e) => handleTouchStart(e, task)}
-                      onTouchMove={handleTouchMove}
-                      onTouchEnd={handleTouchEnd}
-                      className={`flex items-center gap-3 p-3 bg-white rounded-lg border transition-all touch-manipulation select-none cursor-move hover:shadow-md ${
-                        draggedTask?.id === task.id 
-                          ? 'opacity-50 border-blue-300 shadow-lg' 
-                          : 'border-gray-200 hover:border-purple-200 hover:scale-[1.005]'
-                      } ${isDraggingTouch && draggedTask?.id === task.id ? 'z-50' : ''}`}
-                      onClick={() => !isDraggingTouch && handleTaskClick(task)}
-                    >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          toggleComplete(task.id)
-                        }}
-                        className="transition-colors text-gray-400 hover:text-green-500"
-                      >
-                        <Circle size={18} />
-                      </button>
-                      
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          {task.title}
-                        </p>
-                        {task.deadline && (
-                          <div className="flex items-center gap-1 mt-1">
-                            <Clock size={12} className="text-gray-400" />
-                            <span className="text-xs text-gray-500">
-                              {formatDeadline(task.deadline)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Indicadores de estado */}
-                      {task.important && (
-                        <Star size={16} className="text-yellow-500" fill="currentColor" />
-                      )}
-                      
-                      {task.section === 'urgent' && (
-                        <Flame size={16} className="text-red-500" />
-                      )}
-                      
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (confirm('¿Eliminar esta tarea?')) {
-                            deleteTask(task.id)
+                  <SortableContext 
+                    items={dayTasks.map(task => `${day.dateString}-${task.id}`)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {dayTasks.map(task => (
+                      <SortableTaskCard
+                        key={`${day.dateString}-${task.id}`}
+                        task={task}
+                        sectionId={day.dateString}
+                        onClick={selectionMode ? () => {
+                          setSelectedTasks(prev => 
+                            prev.includes(task.id) 
+                              ? prev.filter(id => id !== task.id)
+                              : [...prev, task.id]
+                          )
+                        } : () => handleTaskClick(task)}
+                        onComplete={() => toggleComplete(task.id)}
+                        onMoveBetweenSections={() => {}} // Not needed for weekly view
+                        getSubtasks={getSubtasks}
+                        expandedTasks={expandedTasks}
+                        onToggleExpanded={(taskId: string) => {
+                          const isCurrentlyExpanded = expandedTasks.includes(taskId)
+                          if (isCurrentlyExpanded) {
+                            setExpandedTasks(prev => prev.filter(id => id !== taskId))
+                          } else {
+                            setExpandedTasks(prev => [...prev, taskId])
                           }
                         }}
-                        className="p-1 text-gray-400 hover:text-red-500 transition-colors opacity-0 hover:opacity-100"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))
+                        onToggleTaskComplete={toggleComplete}
+                        selectionMode={selectionMode}
+                        isSelected={selectedTasks.includes(task.id)}
+                      />
+                    ))}
+                  </SortableContext>
                 )}
               </div>
-            </div>
+            </DroppableDay>
           )
-        })}
+          })}
+        </SortableContext>
 
         {/* Sección de Tareas Completadas de la Semana */}
         {(() => {
@@ -784,10 +778,13 @@ export default function SemanalPage() {
                 )}
               </div>
               
+              {/* Section divider */}
+              <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+              
               {showCompletedTasks && (
                 <div className="space-y-2">
                   {allCompletedItemsWeekly.map((item, index) => (
-                    <div key={`completed-${item.id}-${index}`} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all cursor-pointer"
+                    <div key={`completed-${item.id}-${index}`} className="flex items-center gap-2 p-2 bg-transparent border-0 opacity-60 rounded-lg hover:bg-gray-50/30 transition-all cursor-pointer"
                       onClick={() => {
                         toggleComplete(item.id)
                       }}
@@ -818,8 +815,209 @@ export default function SemanalPage() {
         })()}
       </div>
 
+      {/* Floating Move Button - copied from daily */}
+      {selectionMode && selectedTasks.length > 0 && (
+        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-50">
+          <button
+            onClick={() => setShowMoveModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 transition-all min-h-[44px] touch-manipulation"
+          >
+            <Target size={16} />
+            <span className="font-medium">
+              Mover {selectedTasks.length} tarea{selectedTasks.length > 1 ? 's' : ''}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Move Modal - copied from daily */}
+      {showMoveModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4"
+          onClick={() => setShowMoveModal(false)}
+        >
+          <div 
+            className="bg-white rounded-xl max-w-md w-full max-h-[80vh] overflow-y-auto mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 border-b border-gray-200">
+              <h3 className="text-base font-semibold">Mover {selectedTasks.length} tarea{selectedTasks.length > 1 ? 's' : ''}</h3>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              {/* Daily Sections */}
+              <div>
+                <h4 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <Calendar size={18} className="text-blue-600" />
+                  Daily
+                </h4>
+                <div className="grid grid-cols-2 gap-2 ml-6">
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'big_three', page: 'daily' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-3 text-left hover:bg-yellow-50 rounded-lg transition-colors border border-yellow-200 bg-yellow-50"
+                  >
+                    <Star size={16} className="text-yellow-500" />
+                    <div className="text-sm font-medium">Big 3</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'otras_tareas', page: 'daily' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-3 text-left hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 bg-blue-50"
+                  >
+                    <Folder size={16} className="text-blue-500" />
+                    <div className="text-sm font-medium">Otras Tareas</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'en_espera', page: 'daily' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-3 text-left hover:bg-orange-100 rounded-lg transition-colors border border-orange-200 bg-orange-50"
+                  >
+                    <Clock size={16} className="text-orange-500" />
+                    <div className="text-sm font-medium">En Espera</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'urgent', page: 'daily' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-3 text-left hover:bg-red-100 rounded-lg transition-colors border border-red-200 bg-red-50"
+                  >
+                    <Flame size={16} className="text-red-500" />
+                    <div className="text-sm font-medium">Urgente</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Inbox Sections */}
+              <div>
+                <h4 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <ListTodo size={18} className="text-blue-600" />
+                  Inbox
+                </h4>
+                <div className="grid grid-cols-2 gap-2 ml-6">
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { 
+                          page: 'inbox', 
+                          section: 'otras_tareas',
+                          status: 'inbox',
+                          scheduled_date: null
+                        })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-3 text-left hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 bg-blue-50"
+                  >
+                    <ListTodo size={16} className="text-blue-500" />
+                    <div className="text-sm font-medium">Inbox</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Weekly Days */}
+              <div>
+                <h4 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <Calendar size={18} className="text-purple-600" />
+                  Semanal
+                </h4>
+                <div className="grid grid-cols-3 gap-1 ml-6">
+                  {['lunes', 'martes', 'miércoles', 'jueves', 'viernes'].map((dayName, index) => {
+                    const today = new Date()
+                    const startOfWeek = new Date(today)
+                    startOfWeek.setDate(today.getDate() - today.getDay() + 1) // Lunes
+                    const targetDate = new Date(startOfWeek)
+                    targetDate.setDate(startOfWeek.getDate() + index)
+                    const dateString = targetDate.toISOString().split('T')[0]
+                    
+                    return (
+                      <button
+                        key={dayName}
+                        onClick={async () => {
+                          for (const taskId of selectedTasks) {
+                            await updateTask(taskId, { 
+                              page: 'weekly', 
+                              section: 'otras_tareas',
+                              scheduled_date: dateString 
+                            })
+                          }
+                          setShowMoveModal(false)
+                          setSelectionMode(false)
+                          setSelectedTasks([])
+                        }}
+                        className="flex items-center justify-center gap-1 p-2 text-center hover:bg-blue-100 rounded transition-colors border border-blue-200 bg-blue-50"
+                      >
+                        <span className="text-sm font-medium capitalize">{dayName.slice(0,3)}</span>
+                        <span className="text-sm font-medium text-gray-500">{targetDate.getDate()}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-3 border-t border-gray-200 flex gap-2">
+              <button
+                onClick={async () => {
+                  const confirmDelete = window.confirm(`¿Eliminar ${selectedTasks.length} tarea${selectedTasks.length > 1 ? 's' : ''} permanentemente?`)
+                  if (confirmDelete) {
+                    for (const taskId of selectedTasks) {
+                      await deleteTask(taskId)
+                    }
+                    setShowMoveModal(false)
+                    setSelectionMode(false)
+                    setSelectedTasks([])
+                  }
+                }}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg transition-colors min-h-[44px] touch-manipulation"
+              >
+                <Trash2 size={16} />
+                Eliminar
+              </button>
+              <button
+                onClick={() => setShowMoveModal(false)}
+                className="flex-1 flex items-center justify-center gap-1 py-2 text-sm text-black font-bold hover:text-gray-800 transition-colors border border-gray-300 rounded bg-white hover:bg-gray-100"
+              >
+                <X size={12} />
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bottom padding para el nav */}
       <div className="h-20" />
-    </div>
+      </div>
+
+    </DndContext>
   )
 }

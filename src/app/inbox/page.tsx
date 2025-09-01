@@ -5,6 +5,7 @@ import { Inbox, Calendar, ArrowRight, Plus, Clock, Trash2, X, ChevronRight, Circ
 import { useTasks } from '@/hooks/useTasks'
 import { useAuth } from '@/hooks/useAuth'
 import { formatDeadline, parseNaturalLanguage } from '@/utils/dateHelpers'
+import { triggerHapticFeedback } from '@/utils/haptics'
 import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
 import BaseButton from '@/components/ui/BaseButton'
 import SortableTaskCard from '@/components/tasks/SortableTaskCard'
@@ -114,13 +115,14 @@ export default function InboxPage() {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        delay: 500,      // Desktop más rápido que mobile
+        tolerance: 5,
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 250,
-        tolerance: 5,
+        delay: 750,      // 750ms = long press claro
+        tolerance: 8,    // Más tolerancia para mobile
       },
     }),
     useSensor(KeyboardSensor, {
@@ -304,6 +306,7 @@ export default function InboxPage() {
   
   // ✅ DRAG HANDLERS BÁSICOS
   const handleDragStart = (event: any) => {
+    triggerHapticFeedback('medium')  // Vibración al activar drag
     const { active } = event
     setActiveId(active.id)
     
@@ -481,7 +484,7 @@ export default function InboxPage() {
   }
   
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       {/* Header Móvil - Idéntico a Daily */}
       <div className="bg-white border-b border-gray-200 p-3 sm:p-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-4">
@@ -541,7 +544,7 @@ export default function InboxPage() {
               className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors min-h-[36px] w-full justify-center ${
                 attachments.length > 0 || taskDeadline
                   ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
               }`}
             >
               <Inbox size={14} />
@@ -656,9 +659,10 @@ export default function InboxPage() {
                             <Inbox size={20} className="text-blue-600" />
                             Inbox Tasks ({inboxTasksOnly.length})
                           </h2>
-                          <p className="text-sm text-gray-600 mb-4">
-                            Tareas esperando ser organizadas
-                          </p>
+                          
+                          {/* Section divider */}
+                          <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+                          
                           <div className="space-y-2">
                             {inboxTasksOnly.map((task) => (
                               <SortableTaskCard
@@ -686,9 +690,10 @@ export default function InboxPage() {
                             <Flame size={20} className="text-red-500" />
                             Urgente ({urgentTasks.length})
                           </h2>
-                          <p className="text-sm text-gray-600 mb-4">
-                            Tareas que requieren atención inmediata
-                          </p>
+                          
+                          {/* Section divider */}
+                          <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+                          
                           <div className="space-y-2">
                             {urgentTasks.map((task) => (
                               <SortableTaskCard
@@ -716,9 +721,10 @@ export default function InboxPage() {
                             <Clock size={20} className="text-blue-500" />
                             Quick Batch ({quickTasks.length})
                           </h2>
-                          <p className="text-sm text-gray-600 mb-4">
-                            Tareas de menos de 30 minutos
-                          </p>
+                          
+                          {/* Section divider */}
+                          <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+                          
                           <div className="space-y-2">
                             {quickTasks.map((task) => (
                               <SortableTaskCard
@@ -745,9 +751,10 @@ export default function InboxPage() {
                           <CalendarDays size={20} className="text-purple-500" />
                           Monthly ({monthlyTasks.length})
                         </h2>
-                        <p className="text-sm text-gray-600 mb-4">
-                          Tareas mensuales y planificación a largo plazo
-                        </p>
+                        
+                        {/* Section divider */}
+                        <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+                        
                         {monthlyTasks.length === 0 ? (
                           <div></div>
                         ) : (
@@ -777,9 +784,10 @@ export default function InboxPage() {
                           <ShoppingCart size={20} className="text-green-500" />
                           Shopping ({shoppingTasks.length})
                         </h2>
-                        <p className="text-sm text-gray-600 mb-4">
-                          Lista de compras y adquisiciones pendientes
-                        </p>
+                        
+                        {/* Section divider */}
+                        <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+                        
                         {shoppingTasks.length === 0 ? (
                           <div></div>
                         ) : (
@@ -835,10 +843,13 @@ export default function InboxPage() {
               )}
             </div>
             
+            {/* Section divider */}
+            <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+            
             {showCompletedTasks && (
               <div className="space-y-2">
                 {completedInboxTasks.map((item, index) => (
-                  <div key={`completed-${item.id}-${index}`} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-200 transition-all cursor-pointer"
+                  <div key={`completed-${item.id}-${index}`} className="flex items-center gap-2 p-2 bg-transparent border-0 opacity-60 rounded-lg hover:bg-gray-50/30 transition-all cursor-pointer"
                     onClick={() => {
                       toggleComplete(item.id)
                     }}
@@ -879,7 +890,7 @@ export default function InboxPage() {
                 <button
                   key={day.id}
                   onClick={() => scheduleToDay(day.id)}
-                  className="w-full px-4 py-3 text-left bg-gray-50 hover:bg-purple-50 hover:border-purple-200 border border-transparent rounded-lg transition-all flex items-center justify-between group"
+                  className="w-full px-4 py-3 text-left bg-white hover:bg-purple-50 hover:border-purple-200 border border-transparent rounded-lg transition-all flex items-center justify-between group"
                 >
                   <span className="font-medium text-gray-700 group-hover:text-purple-700">
                     {day.label}
@@ -1113,7 +1124,7 @@ export default function InboxPage() {
               </button>
               <button
                 onClick={() => setShowMoveModal(false)}
-                className="flex-1 flex items-center justify-center gap-1 py-2 text-sm text-black font-bold hover:text-gray-800 transition-colors border border-gray-300 rounded bg-gray-50 hover:bg-gray-100"
+                className="flex-1 flex items-center justify-center gap-1 py-2 text-sm text-black font-bold hover:text-gray-800 transition-colors border border-gray-300 rounded bg-white hover:bg-gray-100"
               >
                 <X size={12} />
                 Cancelar

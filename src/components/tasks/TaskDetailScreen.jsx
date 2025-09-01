@@ -6,6 +6,7 @@ import SmartAttachmentsPanel from '../attachments/SmartAttachmentsPanel'
 import SortableSubtask from './SortableSubtask'
 import { useGestures } from '@/hooks/useGestures'
 import { useUserPreferences } from '@/hooks/useUserPreferences'
+import { triggerHapticFeedback } from '@/utils/haptics'
 import { TASK_SECTIONS, getSectionColorClasses } from '../../config/taskSections'
 import { SECTION_ICON_MAP } from '@/utils/sectionIcons'
 import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, Inbox, MapPin, FileText, User, Trash2, Flame, Target, ChevronRight, CalendarDays, ShoppingCart, Image, StickyNote } from 'lucide-react'
@@ -636,13 +637,14 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Más tolerancia para mobile
+        delay: 500,      // Desktop más rápido que mobile
+        tolerance: 5,
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 250,
-        tolerance: 5,
+        delay: 750,      // 750ms = long press claro
+        tolerance: 8,    // Más tolerancia para mobile
       },
     }),
     useSensor(KeyboardSensor, {
@@ -654,6 +656,7 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
   // ✅ DRAG HANDLERS BASADOS EN Daily
   const handleSubtaskDragStart = (event) => {
+    triggerHapticFeedback('medium')  // Vibración al activar drag
     // Drag start logic if needed in the future
   }
 

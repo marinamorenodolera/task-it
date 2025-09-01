@@ -13,31 +13,31 @@ export const useActivities = () => {
   const defaultPredefinedActivities = [
     {
       id: '1',
-      type: 'Pilates',
+      type: 'Yoga',
       duration: 50,
       notes: '',
       color: 'purple'
     },
     {
       id: '2', 
-      type: 'Correr',
-      duration: 30,
+      type: 'Pilates',
+      duration: 50,
+      notes: '',
+      color: 'pink'
+    },
+    {
+      id: '3',
+      type: 'Incline walk',
+      duration: 20,
       notes: '',
       color: 'green'
     },
     {
-      id: '3',
-      type: 'Meditación',
-      duration: 15,
+      id: '4',
+      type: 'Weights',
+      duration: 20,
       notes: '',
       color: 'blue'
-    },
-    {
-      id: '4',
-      type: 'Lectura',
-      duration: 60,
-      notes: '',
-      color: 'orange'
     }
   ]
 
@@ -95,14 +95,9 @@ export const useActivities = () => {
         setActivities(mappedActivities)
       }
       
-      // Load predefined activities from localStorage or use defaults
-      const userPredefined = JSON.parse(localStorage.getItem(`predefined_activities_${user.id}`) || 'null')
-      if (userPredefined) {
-        setPredefinedActivities(userPredefined)
-      } else {
-        setPredefinedActivities(defaultPredefinedActivities)
-        localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(defaultPredefinedActivities))
-      }
+      // Force update to new predefined activities (temporary override)
+      setPredefinedActivities(defaultPredefinedActivities)
+      localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(defaultPredefinedActivities))
       
       setError(null)
     } catch (err) {

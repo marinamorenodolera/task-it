@@ -4,19 +4,17 @@ import { supabase } from '@/lib/supabase'
 
 const DEFAULT_SECTION_ORDER = [
   { id: 'big_three', name: 'Big 3', icon: 'star', visible: true, order: 0, isCustom: false },
-  { id: 'rituals', name: 'Daily Rituals', icon: 'zap', visible: true, order: 1, isCustom: false },
-  { id: 'activities', name: 'Actividades', icon: 'activity', visible: true, order: 2, isCustom: false },
-  { id: 'urgent', name: 'Urgente', icon: 'flame', visible: true, order: 3, isCustom: false },
-  { id: 'en_espera', name: 'En Espera', icon: 'clock', visible: true, order: 4, isCustom: false },
-  { id: 'otras_tareas', name: 'Otras Tareas', icon: 'folder', visible: true, order: 5, isCustom: false },
-  { id: 'completadas', name: 'Completadas', icon: 'check-circle', visible: true, order: 6, isCustom: false }
+  { id: 'urgent', name: 'Urgente', icon: 'flame', visible: true, order: 1, isCustom: false },
+  { id: 'en_espera', name: 'En Espera', icon: 'clock', visible: true, order: 2, isCustom: false },
+  { id: 'otras_tareas', name: 'Otras Tareas', icon: 'folder', visible: true, order: 3, isCustom: false },
+  { id: 'rituals', name: 'Daily Rituals', icon: 'zap', visible: true, order: 4, isCustom: false },
+  { id: 'completadas', name: 'Completadas', icon: 'check-circle', visible: true, order: 5, isCustom: false }
 ]
 
 // Configuración de permisos por sección
 const SECTION_PERMISSIONS = {
   'big_three': { canEdit: false, canDelete: false, canReorder: true },
   'rituals': { canEdit: false, canDelete: false, canReorder: true },
-  'activities': { canEdit: false, canDelete: false, canReorder: true },
   'urgent': { canEdit: false, canDelete: false, canReorder: true },
   'en_espera': { canEdit: false, canDelete: false, canReorder: true },
   'otras_tareas': { canEdit: false, canDelete: false, canReorder: true },
@@ -207,13 +205,16 @@ export const useUserPreferences = () => {
     return await updateSectionOrder(DEFAULT_SECTION_ORDER)
   }
 
-  // 🚨 TEMPORAL - RESET COMPLETO CON ACTIVITIES
-  const forceResetWithActivities = async () => {
+  // 🚨 TEMPORAL - RESET COMPLETO SIN ACTIVITIES
+  const forceResetNoActivities = async () => {
     if (!user?.id) return { error: 'Usuario no autenticado' }
     
-    console.log('🚨 FORCE RESET - Eliminando preferencias y recreando con activities')
+    console.log('🚨 FORCE RESET - Eliminando preferencias y recreando SIN activities')
     
-    // Eliminar preferencias actuales
+    // Limpiar localStorage
+    localStorage.removeItem(`userPrefs_${user.id}`)
+    
+    // Eliminar preferencias actuales de Supabase
     const { error: deleteError } = await supabase
       .from('user_profiles')
       .delete()
@@ -223,7 +224,7 @@ export const useUserPreferences = () => {
       console.error('Error eliminando preferencias:', deleteError)
     }
     
-    // Aplicar DEFAULT_SECTION_ORDER que incluye activities
+    // Aplicar DEFAULT_SECTION_ORDER que NO incluye activities
     setSectionOrder(DEFAULT_SECTION_ORDER)
     return await updateSectionOrder(DEFAULT_SECTION_ORDER)
   }
@@ -304,36 +305,21 @@ export const useUserPreferences = () => {
     .filter(section => section.visible)
     .sort((a, b) => a.order - b.order)
 
-  // 🚨 TEMPORAL - FORZAR RESET COMPLETO PARA ACTUALIZAR IDs
+  // 🚨 TEMPORAL - FORZAR RESET COMPLETO PARA ACTUALIZAR IDs Y REMOVER ACTIVITIES
   useEffect(() => {
     if (user?.id && !loading && sectionOrder.length > 0) {
-      // Verificar si hay IDs obsoletos
+      // Verificar si hay IDs obsoletos o activities section
       const hasOldIds = sectionOrder.some(s => 
-        s.id === 'big3' || s.id === 'waiting' || s.id === 'routine' || s.id === 'completed'
+        s.id === 'big3' || s.id === 'waiting' || s.id === 'routine' || s.id === 'completed' || s.id === 'activities'
       )
       
       if (hasOldIds) {
-        console.log('🚨 DETECTADOS IDs OBSOLETOS - FORZANDO RESET COMPLETO')
+        console.log('🚨 DETECTADOS IDs OBSOLETOS O ACTIVITIES - FORZANDO RESET COMPLETO')
         console.log('IDs actuales:', sectionOrder.map(s => s.id))
-        forceResetWithActivities()
+        forceResetNoActivities()
         return
       }
       
-      const hasActivities = sectionOrder.some(s => s.id === 'activities')
-      if (!hasActivities) {
-        console.log('🚨 FORZANDO AÑADIR ACTIVITIES SECTION')
-        const activitiesSection = { 
-          id: 'activities', 
-          name: 'Actividades', 
-          icon: 'activity', 
-          visible: true, 
-          order: 2, 
-          isCustom: false 
-        }
-        const newOrder = [...sectionOrder, activitiesSection].sort((a, b) => a.order - b.order)
-        setSectionOrder(newOrder)
-        updateSectionOrder(newOrder)
-      }
     }
   }, [user?.id, loading, sectionOrder.length])
 
@@ -353,6 +339,6 @@ export const useUserPreferences = () => {
     deleteCustomSection,
     SECTION_PERMISSIONS,
     // 🚨 TEMPORAL:
-    forceResetWithActivities
+    forceResetNoActivities
   }
 }

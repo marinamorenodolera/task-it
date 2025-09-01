@@ -30,8 +30,8 @@ import {
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 
 // Función helper para renderizar iconos de sección con colores correctos (copiada de TaskItApp)
-const renderSectionIconLocal = (sectionId, size = 20) => {
-  const sectionIconMapping = {
+const renderSectionIconLocal = (sectionId: string, size: number = 20) => {
+  const sectionIconMapping: Record<string, string> = {
     'big_three': 'star',
     'en_espera': 'clock',
     'otras_tareas': 'folder',
@@ -42,10 +42,10 @@ const renderSectionIconLocal = (sectionId, size = 20) => {
   }
   
   const iconName = sectionIconMapping[sectionId] || 'folder'
-  const iconData = SECTION_ICON_MAP[iconName]
+  const iconData = SECTION_ICON_MAP[iconName as keyof typeof SECTION_ICON_MAP]
   
   if (!iconData) {
-    const fallbackIcon = SECTION_ICON_MAP['folder']
+    const fallbackIcon = SECTION_ICON_MAP['folder' as keyof typeof SECTION_ICON_MAP]
     const IconComponent = fallbackIcon.icon
     return <IconComponent size={size} className={fallbackIcon.color} />
   }
@@ -72,7 +72,8 @@ export default function InboxPage() {
     getSubtasks,
     loadSubtasks,
     addSubtask,
-    deleteSubtask
+    deleteSubtask,
+    updateSubtaskOrder
   } = useTasks()
   
   // Estados para attachments
@@ -102,12 +103,12 @@ export default function InboxPage() {
   
   // Estados para gestionar tareas (copiado de Daily)
   const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedTasks, setSelectedTasks] = useState([])
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([])
   const [showMoveModal, setShowMoveModal] = useState(false)
   
   // ✅ DRAG AND DROP STATE
   const [activeId, setActiveId] = useState(null)
-  const [draggedTask, setDraggedTask] = useState(null)
+  const [draggedTask, setDraggedTask] = useState<any>(null)
   
   // ✅ DRAG AND DROP SENSORS
   const sensors = useSensors(
@@ -284,7 +285,7 @@ export default function InboxPage() {
         if (attachments.length > 0) {
           for (const attachment of attachments) {
             try {
-              await addAttachment(result.data.id, attachment)
+              await addAttachment(result.data?.id, attachment)
             } catch (error) {
               console.error('Error subiendo attachment:', error)
             }
@@ -302,7 +303,7 @@ export default function InboxPage() {
   }
   
   // ✅ DRAG HANDLERS BÁSICOS
-  const handleDragStart = (event) => {
+  const handleDragStart = (event: any) => {
     const { active } = event
     setActiveId(active.id)
     
@@ -312,7 +313,7 @@ export default function InboxPage() {
   }
 
   // ✅ DRAG END HANDLER - COPIADO DE DAILY Y ADAPTADO PARA INBOX
-  const handleDragEnd = async (event) => {
+  const handleDragEnd = async (event: any) => {
     const { active, over } = event
     
     setActiveId(null)
@@ -349,7 +350,7 @@ export default function InboxPage() {
     }))
 
     // Actualizar estado inmediatamente sin recargar desde BD
-    const otherTasks = tasks.filter(task => task.page !== 'inbox' || task.completed)
+    const otherTasks = (tasks as any[]).filter(task => task.page !== 'inbox' || task.completed)
     const newTasksArray = [...otherTasks, ...updatedReorderedTasks]
     
     // No tenemos setTasks en Inbox, así que recargaremos después de la actualización
@@ -395,7 +396,7 @@ export default function InboxPage() {
     
     if (confirmDelete) {
       // Cambiar texto del botón a "eliminando..."
-      const deleteButton = document.querySelector('[title="Eliminar todas las tareas completadas del inbox"]')
+      const deleteButton = document.querySelector('[title="Eliminar todas las tareas completadas del inbox"]') as HTMLElement
       const originalText = deleteButton?.textContent
       if (deleteButton) {
         deleteButton.textContent = 'eliminando...'
@@ -434,9 +435,9 @@ export default function InboxPage() {
       } finally {
         // Restaurar botón
         if (deleteButton && originalText) {
-          deleteButton.textContent = originalText
-          deleteButton.style.pointerEvents = 'auto'
-          deleteButton.style.opacity = '1'
+          deleteButton!.textContent = originalText
+          deleteButton!.style.pointerEvents = 'auto'
+          deleteButton!.style.opacity = '1'
         }
       }
     }
@@ -474,6 +475,7 @@ export default function InboxPage() {
         onToggleTaskComplete={toggleComplete}
         addSubtask={addSubtask}
         deleteSubtask={deleteSubtask}
+        updateSubtaskOrder={updateSubtaskOrder}
       />
     )
   }
@@ -521,7 +523,7 @@ export default function InboxPage() {
               type="submit"
               title="Añadir tarea rápida"
               disabled={!newTaskTitle.trim()}
-              onClick={(e) => {
+              onClick={(e: any) => {
                 if (e.type === 'click') {
                   e.preventDefault();
                   handleAddTask();
@@ -560,7 +562,7 @@ export default function InboxPage() {
             onAttach={handleAddAttachment}
             onDeadlineSet={handleSetDeadline}
             taskText={newTaskTitle}
-            existingAttachments={attachments}
+            existingAttachments={[]}
           />
 
           {/* ✅ GESTIONAR TAREAS - INTEGRADO COMO DAILY */}

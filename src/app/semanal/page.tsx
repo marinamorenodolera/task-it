@@ -27,6 +27,7 @@ export default function SemanalPage() {
     loadSubtasks,
     addSubtask,
     deleteSubtask,
+    updateSubtaskOrder,
     moveTaskBetweenSections,
     loadTasks
   } = useTasks()
@@ -174,7 +175,7 @@ export default function SemanalPage() {
     
     if (confirmDelete) {
       // Cambiar texto del botón a "eliminando..."
-      const deleteButton = document.querySelector('[title="Eliminar todas las tareas completadas de la semana"]')
+      const deleteButton = document.querySelector('[title="Eliminar todas las tareas completadas de la semana"]') as HTMLElement
       const originalText = deleteButton?.textContent
       if (deleteButton) {
         deleteButton.textContent = 'eliminando...'
@@ -213,9 +214,9 @@ export default function SemanalPage() {
       } finally {
         // Restaurar botón
         if (deleteButton && originalText) {
-          deleteButton.textContent = originalText
-          deleteButton.style.pointerEvents = 'auto'
-          deleteButton.style.opacity = '1'
+          deleteButton!.textContent = originalText
+          deleteButton!.style.pointerEvents = 'auto'
+          deleteButton!.style.opacity = '1'
         }
       }
     }
@@ -260,7 +261,7 @@ export default function SemanalPage() {
         if (attachments.length > 0) {
           for (const attachment of attachments) {
             try {
-              await addAttachment(result.data.id, attachment)
+              await addAttachment(result.data?.id, attachment)
             } catch (error) {
               console.error('Error subiendo attachment:', error)
             }
@@ -478,6 +479,7 @@ export default function SemanalPage() {
         onToggleTaskComplete={toggleComplete}
         addSubtask={addSubtask}
         deleteSubtask={deleteSubtask}
+        updateSubtaskOrder={updateSubtaskOrder}
         subtasksCount={getSubtasks(selectedTask.id).length}
       />
     )
@@ -569,7 +571,7 @@ export default function SemanalPage() {
             onAttach={handleAddAttachment}
             onDeadlineSet={handleSetDeadline}
             taskText={newTaskTitle}
-            existingAttachments={attachments}
+            existingAttachments={[]}
           />
           
           {/* Selector de días con estilo de botones Daily */}

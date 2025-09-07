@@ -899,8 +899,8 @@ export default function InboxPage() {
           if (process.env.NODE_ENV === 'development') {
             // Only log when tasks actually change, not on every render
             const currentTaskIds = inboxTasks.map(t => t.id).join(',')
-            if (window.lastTaskIds !== currentTaskIds) {
-              window.lastTaskIds = currentTaskIds
+            if ((window as any).lastTaskIds !== currentTaskIds) {
+              (window as any).lastTaskIds = currentTaskIds
               console.log('🔍 INBOX SECTIONS DEBUG (tasks changed):')
               console.log('Total inboxTasks:', inboxTasks.length)
               console.log('Monthly:', monthlyTasks.length, 'Shopping:', shoppingTasks.length, 'Devoluciones:', devolucionesTasks.length, 'Inbox Only:', inboxTasksOnly.length)

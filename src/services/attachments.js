@@ -82,7 +82,7 @@ export const attachmentService = {
       return { error: null }
     } catch (error) {
       console.error('Error deleting file:', error)
-      return { error: error.message }
+      throw error // Lanzar el error en lugar de retornarlo
     }
   },
 
@@ -135,6 +135,8 @@ export const attachmentService = {
   // Eliminar attachment
   async deleteAttachment(attachmentId) {
     try {
+      console.log('🗑️ Attempting to delete attachment:', attachmentId)
+      
       // Primero obtener el attachment para saber si tiene archivo
       const { data: attachment, error: fetchError } = await supabase
         .from('task_attachments')
@@ -142,24 +144,37 @@ export const attachmentService = {
         .eq('id', attachmentId)
         .single()
 
-      if (fetchError) throw fetchError
+      if (fetchError) {
+        console.error('❌ Error fetching attachment:', fetchError)
+        throw fetchError
+      }
+
+      console.log('📄 Attachment found:', attachment)
 
       // Si tiene archivo, eliminarlo del storage
       if (attachment.file_path) {
+        console.log('🗂️ Deleting file from storage:', attachment.file_path)
         await this.deleteFile(attachment.file_path)
       }
 
       // Eliminar el registro de la base de datos
+      console.log('🗑️ Deleting attachment from database')
       const { error } = await supabase
         .from('task_attachments')
         .delete()
         .eq('id', attachmentId)
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Database deletion error:', error)
+        throw error
+      }
+      
+      console.log('✅ Attachment deleted successfully')
       return { error: null }
     } catch (error) {
-      console.error('Error deleting attachment:', error)
-      return { error: error.message }
+      console.error('❌ Error deleting attachment:', error)
+      console.error('❌ Error details:', JSON.stringify(error, null, 2))
+      return { error: error.message || 'Error desconocido al eliminar attachment' }
     }
   },
 

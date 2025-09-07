@@ -930,7 +930,15 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
 
   const handleAddAttachment = async (attachmentData) => {
     try {
-      const result = await onAddAttachment(task.id, attachmentData)
+      // Verificar si onAddAttachment espera 2 parámetros (taskId, attachment) o solo 1 (attachment)
+      let result
+      if (onAddAttachment.length === 2) {
+        // Función original de useTasks que espera (taskId, attachment)
+        result = await onAddAttachment(task.id, attachmentData)
+      } else {
+        // Función wrapper que solo espera (attachment)
+        result = await onAddAttachment(attachmentData)
+      }
       
       if (result && !result.error) {
         setTaskAttachments(prev => [...prev, result.data])
@@ -1653,8 +1661,17 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                     try {
                       // Verificar que attachment tenga la estructura correcta
                       if (attachment && typeof attachment === 'object') {
-                        await onAddAttachment(attachment)
-                        await onReloadAttachments()
+                        // Usar la misma lógica que handleAddAttachment
+                        let result
+                        if (onAddAttachment.length === 2) {
+                          result = await onAddAttachment(task.id, attachment)
+                        } else {
+                          result = await onAddAttachment(attachment)
+                        }
+                        
+                        if (result && !result.error) {
+                          await onReloadAttachments()
+                        }
                       } else {
                         console.error('Attachment data is invalid:', attachment)
                       }
@@ -1704,7 +1721,15 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
                       key={attachment.id}
                       attachment={processedAttachment}
                       onDelete={async () => {
-                        const result = await onDeleteAttachment(task.id, attachment.id)
+                        // Verificar si onDeleteAttachment espera 2 parámetros (taskId, attachmentId) o solo 1 (attachmentId)
+                        let result
+                        if (onDeleteAttachment.length === 2) {
+                          // Función original de useTasks que espera (taskId, attachmentId)
+                          result = await onDeleteAttachment(task.id, attachment.id)
+                        } else {
+                          // Función wrapper que solo espera (attachmentId)
+                          result = await onDeleteAttachment(attachment.id)
+                        }
                         
                         if (!result?.error) {
                           setTaskAttachments(prev => prev.filter(att => att.id !== attachment.id))

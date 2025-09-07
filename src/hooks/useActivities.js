@@ -71,35 +71,46 @@ export const useActivities = () => {
       // Check for daily reset first
       checkDailyReset()
       
-      // Load today's activities from Supabase database
-      const { data: userActivities, error: activitiesError } = await supabase
-        .from('activity_history')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-      
-      if (activitiesError) {
-        console.error('Error loading activities from Supabase:', activitiesError)
-        setActivities([])
+      // Cache con timestamp y expiración
+      const cacheKey = `activities_${user.id}`
+      const cacheData = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      const CACHE_EXPIRY = 5 * 60 * 1000 // 5 minutos en ms
+
+      let userActivities = []
+      let shouldRefetch = false
+
+      if (cacheData && cacheData.timestamp) {
+        const isExpired = (Date.now() - cacheData.timestamp) > CACHE_EXPIRY
+        if (isExpired) {
+          console.log('🔄 Cache expirado, cargando datos frescos...')
+          shouldRefetch = true
+          userActivities = cacheData.data || [] // Usar cache mientras carga nuevo
+        } else {
+          console.log('✅ Cache válido, usando datos locales')
+          userActivities = cacheData.data || []
+        }
       } else {
-        // Map database fields to component format
-        const mappedActivities = (userActivities || []).map(activity => ({
-          id: activity.id,
-          type: activity.activity_type,
-          date: new Date(activity.created_at).toDateString(),
-          time: activity.activity_time,
-          notes: activity.notes || '',
-          duration: activity.duration_minutes || 0,
-          created_at: activity.created_at
-        }))
-        setActivities(mappedActivities)
+        console.log('📭 No hay cache, primera carga')
+        shouldRefetch = true
+      }
+
+      // Load predefined activities from localStorage or use defaults
+      const userPredefined = JSON.parse(localStorage.getItem(`predefined_activities_${user.id}`) || 'null')
+      if (userPredefined) {
+        setPredefinedActivities(userPredefined)
+      } else {
+        setPredefinedActivities(defaultPredefinedActivities)
+        localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(defaultPredefinedActivities))
       }
       
-      // Force update to new predefined activities (temporary override)
-      setPredefinedActivities(defaultPredefinedActivities)
-      localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(defaultPredefinedActivities))
-      
+      setActivities(userActivities)
       setError(null)
+
+      // Si cache expiró, cargar datos frescos en background
+      if (shouldRefetch) {
+        loadFreshActivitiesInBackground()
+      }
+      
     } catch (err) {
       console.error('Error loading activities:', err)
       setError(err.message)
@@ -134,6 +145,62 @@ export const useActivities = () => {
     } catch (error) {
       console.error('Error saving to Supabase:', error)
       return { data: null, error: error.message }
+    }
+  }
+
+  // Cargar actividades frescas en background sin afectar UI
+  const loadFreshActivitiesInBackground = async () => {
+    if (!user?.id) return
+    
+    try {
+      console.log('🔄 Cargando actividades frescas en background...')
+      
+      // Obtener actividades de hoy desde Supabase
+      const today = new Date().toISOString().split('T')[0]
+      const { data: freshData, error } = await supabase
+        .from('activity_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('activity_date', today)
+        .order('activity_time', { ascending: false })
+      
+      if (error) {
+        console.warn('Error cargando datos frescos:', error)
+        return
+      }
+      
+      // Mapear a formato local
+      const mappedActivities = (freshData || []).map(item => ({
+        id: item.id.toString(),
+        type: item.activity_type,
+        date: new Date(item.activity_date).toDateString(),
+        time: item.activity_time,
+        notes: item.notes || '',
+        duration: item.duration_minutes || 0,
+        created_at: item.created_at
+      }))
+      
+      // Actualizar cache con timestamp
+      const cacheData = {
+        data: mappedActivities,
+        timestamp: Date.now()
+      }
+      localStorage.setItem(`activities_${user.id}`, JSON.stringify(cacheData))
+      
+      // Actualizar estado solo si datos son diferentes
+      setActivities(current => {
+        const currentIds = current.map(a => a.id).sort()
+        const freshIds = mappedActivities.map(a => a.id).sort()
+        
+        if (JSON.stringify(currentIds) !== JSON.stringify(freshIds)) {
+          console.log('✨ Datos frescos detectados, actualizando UI silenciosamente')
+          return mappedActivities
+        }
+        return current
+      })
+      
+    } catch (error) {
+      console.error('Error en background refresh:', error)
     }
   }
 
@@ -249,10 +316,17 @@ export const useActivities = () => {
       // Add to local state (for today's view)
       setActivities(prev => [newActivity, ...prev])
       
-      // Save to localStorage for persistence
-      const userActivities = JSON.parse(localStorage.getItem(`activities_${user.id}`) || '[]')
-      userActivities.unshift(newActivity)
-      localStorage.setItem(`activities_${user.id}`, JSON.stringify(userActivities.slice(0, 50)))
+      // Save to localStorage for persistence with cache format
+      const cacheKey = `activities_${user.id}`
+      const cacheData = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      const currentActivities = cacheData?.data || []
+
+      currentActivities.unshift(newActivity)
+      const updatedCacheData = {
+        data: currentActivities.slice(0, 50),
+        timestamp: Date.now()
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(updatedCacheData))
 
       return { data: newActivity, error: null }
     } catch (err) {
@@ -389,17 +463,52 @@ export const useActivities = () => {
         {
           event: '*',
           schema: 'public',
-          table: 'activities',
+          table: 'activity_history',
           filter: `user_id=eq.${user.id}`
         },
         () => {
+          console.log('🔴 Real-time change detected, refreshing...')
           loadActivities()
         }
       )
       .subscribe()
 
+    // Auto-refresh cuando usuario vuelve a la app
+    let refreshTimeout = null
+    
+    const throttledRefresh = () => {
+      if (refreshTimeout) return
+      refreshTimeout = setTimeout(() => {
+        console.log('🎯 Refreshing due to app focus...')
+        loadActivities()
+        refreshTimeout = null
+      }, 2000) // Solo 1 refresh cada 2 segundos máximo
+    }
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user?.id) {
+        console.log('📱 Usuario volvió a la app')
+        throttledRefresh()
+      }
+    }
+
+    const handleWindowFocus = () => {
+      if (user?.id) {
+        console.log('🎯 App recibió focus')
+        throttledRefresh()
+      }
+    }
+
+    // Registrar event listeners
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleWindowFocus)
+
+    // Cleanup
     return () => {
       subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleWindowFocus)
+      if (refreshTimeout) clearTimeout(refreshTimeout)
     }
   }, [user])
 

@@ -41,6 +41,7 @@ import SmartAttachmentsPanel from '@/components/attachments/SmartAttachmentsPane
 import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
 import TaskCard from '@/components/tasks/TaskCard'
 import BaseButton from '@/components/ui/BaseButton'
+import PullToRefresh from '@/components/ui/PullToRefresh'
 import ActivitySettings from '@/components/activities/ActivitySettings'
 import PreferencesSection from '@/components/features/settings/PreferencesSection'
 import { SECTION_ICON_MAP, ICON_OPTIONS } from '@/utils/sectionIcons'
@@ -115,6 +116,7 @@ const TaskItApp = () => {
     predefinedActivities,
     addActivity,
     deleteActivity,
+    loadActivities,
     addPredefinedActivity,
     updatePredefinedActivity,
     deletePredefinedActivity,
@@ -1134,8 +1136,9 @@ const TaskItApp = () => {
   }
 
   return (
-    <div 
-      className="min-h-screen bg-white"
+    <PullToRefresh onRefresh={loadActivities}>
+      <div 
+        className="min-h-screen bg-white"
       onClick={(e) => {
         // Hide keyboard when clicking outside the quick capture input
         if (!e.target.closest('input[placeholder*="Llamar cliente"]') && 
@@ -1477,13 +1480,34 @@ const TaskItApp = () => {
             ) : (
               <Activity size={16} />
             )}
-            <span className="text-xs sm:text-sm font-medium">
-              {activityStats.totalTimeToday > 0 ? (
-                <><span className="hidden sm:inline">Actividad </span><span className="font-bold text-purple-700">{activityStats.totalTimeToday}min<span className="hidden sm:inline"> conseguidos</span>!</span></>
-              ) : (
-                'Actividad'
-              )}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-medium">
+                {activityStats.totalTimeToday > 0 ? (
+                  <><span className="hidden sm:inline">Actividad </span><span className="font-bold text-purple-700">{activityStats.totalTimeToday}min<span className="hidden sm:inline"> conseguidos</span>!</span></>
+                ) : (
+                  'Actividad'
+                )}
+              </span>
+              
+              {/* Indicadores sutiles de estado */}
+              <div className="flex items-center gap-1 ml-auto">
+                {/* Punto de estado de cache */}
+                <div 
+                  className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
+                    activities.length > 0 ? 'bg-green-400' : 'bg-gray-300'
+                  }`} 
+                  title="Estado de datos"
+                />
+                
+                {/* Punto de estado de conexión */}
+                <div 
+                  className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
+                    navigator.onLine ? 'bg-blue-400' : 'bg-red-400'
+                  }`} 
+                  title={navigator.onLine ? 'Conectado' : 'Sin conexión'}
+                />
+              </div>
+            </div>
           </button>
         </div>
       </div>
@@ -2212,7 +2236,8 @@ const TaskItApp = () => {
         </div>
       )}
 
-    </div>
+      </div>
+    </PullToRefresh>
   )
 }
 

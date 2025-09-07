@@ -23,7 +23,7 @@ import {
   Folder, Flame, Lightbulb, Home,
   Rocket, BarChart, Briefcase, Palette,
   Heart, Shield, Trophy, Users as UsersIcon, Settings as SettingsIcon,
-  Image as ImageIcon, FileText, StickyNote, User, MapPin, CalendarDays, ShoppingCart, Inbox
+  Image as ImageIcon, FileText, StickyNote, User, MapPin, CalendarDays, ShoppingCart, Inbox, RotateCcw
 } from 'lucide-react'
 
 import { useAuth } from '@/hooks/useAuth'
@@ -206,7 +206,7 @@ const TaskItApp = () => {
     )
   }
 
-  // ✅ FUNCIÓN PARA RENDERIZAR TASK SECTION CON DROP ZONE
+  // ✅ FUNCIÓN PARA RENDERIZAR TASK SECTION CON DROP ZONE Y SORTABLE CONTEXT SEPARADO
   const renderTaskSection = (section) => {
     if (!section.visible) return null
 
@@ -240,7 +240,7 @@ const TaskItApp = () => {
       )
     }
     
-    // Renderizado completo para secciones con tareas
+    // Renderizado completo para secciones con tareas CON SORTABLE CONTEXT INDIVIDUAL
     return (
       <div 
         key={section.id}
@@ -262,36 +262,39 @@ const TaskItApp = () => {
           )}
         </h2>
         
-        
-        
-        
         {/* Section divider after header/description, before tasks */}
         <div className="border-b border-gray-200/30 mx-0 my-3"></div>
         
-        <div className="space-y-2">
-          {sectionTasks.map((task) => (
-            <SortableTaskCard
-              key={`${section.id}-${task.id}`}
-              task={task}
-              sectionId={section.id}
-              onClick={selectionMode ? () => {
-                setSelectedTasks(prev => 
-                  prev.includes(task.id) 
-                    ? prev.filter(id => id !== task.id)
-                    : [...prev, task.id]
-                )
-              } : () => handleTaskClick(task)}
-              onComplete={toggleTaskComplete}
-              onMoveBetweenSections={moveTaskBetweenSections}
-              getSubtasks={getSubtasks}
-              expandedTasks={expandedTasks}
-              onToggleExpanded={onToggleExpanded}
-              onToggleTaskComplete={toggleComplete}
-              selectionMode={selectionMode}
-              isSelected={selectedTasks.includes(task.id)}
-            />
-          ))}
-        </div>
+        {/* ✅ SORTABLE CONTEXT INDIVIDUAL POR SECCIÓN - ELIMINA VISUAL INTERFERENCE */}
+        <SortableContext 
+          items={sectionTasks.map(task => `${section.id}-${task.id}`)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-2">
+            {sectionTasks.map((task) => (
+              <SortableTaskCard
+                key={`${section.id}-${task.id}`}
+                task={task}
+                sectionId={section.id}
+                onClick={selectionMode ? () => {
+                  setSelectedTasks(prev => 
+                    prev.includes(task.id) 
+                      ? prev.filter(id => id !== task.id)
+                      : [...prev, task.id]
+                  )
+                } : () => handleTaskClick(task)}
+                onComplete={toggleTaskComplete}
+                onMoveBetweenSections={moveTaskBetweenSections}
+                getSubtasks={getSubtasks}
+                expandedTasks={expandedTasks}
+                onToggleExpanded={onToggleExpanded}
+                onToggleTaskComplete={toggleComplete}
+                selectionMode={selectionMode}
+                isSelected={selectedTasks.includes(task.id)}
+              />
+            ))}
+          </div>
+        </SortableContext>
       </div>
     )
   }
@@ -493,6 +496,7 @@ const TaskItApp = () => {
   const [selectedActivity, setSelectedActivity] = useState(null)
   const [showQuickOptions, setShowQuickOptions] = useState(false)
   const [lastAddedTask, setLastAddedTask] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [expandedRitual, setExpandedRitual] = useState(null)
   const [showTaskSelector, setShowTaskSelector] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
@@ -549,15 +553,25 @@ const TaskItApp = () => {
     })
   )
 
-  // Sincronizar selectedTask cuando tasks cambia
+  // ✅ PERFORMANCE FIX: Sincronizar selectedTask cuando tasks cambia (memoized)
   useEffect(() => {
     if (selectedTask && tasks.length > 0) {
       const updatedTask = tasks.find(t => t.id === selectedTask.id)
-      if (updatedTask && JSON.stringify(updatedTask) !== JSON.stringify(selectedTask)) {
-        setSelectedTask(updatedTask)
+      if (updatedTask) {
+        // Only update if there are meaningful changes (avoid JSON.stringify for performance)
+        const hasChanges = (
+          updatedTask.title !== selectedTask.title ||
+          updatedTask.completed !== selectedTask.completed ||
+          updatedTask.updated_at !== selectedTask.updated_at ||
+          updatedTask.section !== selectedTask.section
+        )
+        
+        if (hasChanges) {
+          setSelectedTask(updatedTask)
+        }
       }
     }
-  }, [tasks])
+  }, [selectedTask?.id, tasks.length]) // ✅ Only depend on selectedTask ID and tasks length
 
   useEffect(() => {
     // Check for daily reset when app loads
@@ -704,59 +718,72 @@ const TaskItApp = () => {
   }
 
   const addQuickTask = async () => {
+    // Prevenir múltiples submissions
+    if (isSubmitting) return
+    setIsSubmitting(true)
+    
     if (quickCapture.trim()) {
-      const { deadline, amount } = parseNaturalLanguage(quickCapture)
-      
-      const newTaskData = {
-        title: quickCapture,
-        important: selectedSection === 'big_three',
-        deadline,
-        amount,
-        link: null,
-        notes: '',
-        section: selectedSection
-      }
-      
-      const result = await addTask(newTaskData)
-      // ✅ OPTIMISTIC UPDATE - NO necesita reload, useTasks ya actualiza el estado
-      
-      if (result.data) {
-        // Procesar TODOS los attachments
-        if (attachments.length > 0) {
-          for (const attachment of attachments) {
-            try {
-              await addAttachment(result.data.id, attachment)
-            } catch (error) {
-              console.error('Error subiendo attachment:', error)
+      try {
+        const { deadline, amount } = parseNaturalLanguage(quickCapture)
+        
+        const newTaskData = {
+          title: quickCapture,
+          important: selectedSection === 'big_three',
+          deadline,
+          amount,
+          link: null,
+          notes: '',
+          section: selectedSection
+        }
+        
+        const result = await addTask(newTaskData)
+        // ✅ OPTIMISTIC UPDATE - NO necesita reload, useTasks ya actualiza el estado
+        
+        if (result.data) {
+          // Procesar TODOS los attachments
+          if (attachments.length > 0) {
+            for (const attachment of attachments) {
+              try {
+                await addAttachment(result.data.id, attachment)
+              } catch (error) {
+                console.error('Error subiendo attachment:', error)
+              }
             }
           }
-        }
 
-        // Mostrar modal de éxito
-        setCreatedTaskInfo({
-          title: result.data.title,
-          id: result.data.id
-        })
-        setShowTaskCreatedModal(true)
-        
-        setLastAddedTask(result.data.id)
-        setQuickCapture('')
-        setShowAttachments(false)
-        setAttachments([])
-        setTaskDeadline('')
-        setSelectedSection('otras_tareas') // Reset to default
-        setShouldAutoFocus(false) // Resetear autoFocus después de crear tarea
-        
-        // ✅ HIDE KEYBOARD after task creation (mobile UX)
-        blurQuickCaptureInput()
-        
-        // Ocultar modal después de 1.5 segundos
-        setTimeout(() => {
-          setShowTaskCreatedModal(false)
-          setCreatedTaskInfo(null)
-          setLastAddedTask(null)
-        }, 1500)
+          // Mostrar modal de éxito
+          setCreatedTaskInfo({
+            title: result.data.title,
+            id: result.data.id
+          })
+          setShowTaskCreatedModal(true)
+          
+          setLastAddedTask(result.data.id)
+          setQuickCapture('')
+          setShowAttachments(false)
+          setAttachments([])
+          setTaskDeadline('')
+          setSelectedSection('otras_tareas') // Reset to default
+          setShouldAutoFocus(false) // Resetear autoFocus después de crear tarea
+          
+          // ✅ HIDE KEYBOARD after task creation (mobile UX)
+          blurQuickCaptureInput()
+          
+          // Ocultar modal después de 1.5 segundos
+          setTimeout(() => {
+            setShowTaskCreatedModal(false)
+            setCreatedTaskInfo(null)
+            setLastAddedTask(null)
+          }, 1500)
+        }
+      } catch (error) {
+        console.error('Error in addQuickTask:', error)
+        alert('Error creando tarea: ' + error.message)
+      } finally {
+        setIsSubmitting(false)
       }
+    } else {
+      setIsSubmitting(false)
     }
   }
 
@@ -1183,7 +1210,7 @@ const TaskItApp = () => {
             <BaseButton
               type="submit"
               title="Añadir tarea rápida"
-              disabled={!quickCapture.trim()}
+              disabled={isSubmitting || !quickCapture.trim()}
               onClick={(e) => {
                 // Fallback para móvil si el submit no funciona
                 if (e.type === 'click') {
@@ -1465,7 +1492,7 @@ const TaskItApp = () => {
       {/* Lista de Tareas */}
       <div className="p-3 sm:p-4 space-y-4 sm:space-y-6">
         
-        {/* ✅ DNDCONTEXT UNIFICADO - INSPIRADO EN WEEKLY SYSTEM */}
+        {/* ✅ DNDCONTEXT GLOBAL PARA CROSS-SECTION DRAG - SIN SORTABLE CONTEXT GLOBAL */}
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -1479,19 +1506,26 @@ const TaskItApp = () => {
             }
           }}
         >
-          {/* ✅ SORTABLECONTEXT UNIFICADO CON TODAS LAS TAREAS */}
-          <SortableContext 
-            items={[
-              ...importantTasks.map(task => `big_three-${task.id}`),
-              ...urgentTasks.map(task => `urgent-${task.id}`),
-              ...waitingTasks.map(task => `en_espera-${task.id}`),
-              ...routineTasks.map(task => `otras_tareas-${task.id}`)
-            ]}
-            strategy={verticalListSortingStrategy}
-          >
-            {/* RENDERIZADO DINÁMICO DE SECCIONES RESPETANDO CONFIGURACIÓN DEL USUARIO */}
-            {visibleSections.map((section) => renderSection(section))}
-          </SortableContext>
+          {/* ✅ RENDERIZADO CON SORTABLE CONTEXTS INDIVIDUALES POR SECCIÓN */}
+          {visibleSections.map((section) => renderSection(section))}
+          
+          {/* ✅ DRAG OVERLAY PARA VISUAL FEEDBACK DURANTE DRAG */}
+          <DragOverlay>
+            {draggedTask && (
+              <div className="transform rotate-3 opacity-90 shadow-2xl">
+                <div className="bg-white border-2 border-blue-300 rounded-lg p-3 max-w-sm">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {draggedTask.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                      Moviendo...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DragOverlay>
         </DndContext>
       </div>
 
@@ -2056,6 +2090,51 @@ const TaskItApp = () => {
                   >
                     <ShoppingCart size={14} className="text-green-500" />
                     <div className="text-sm font-medium">Shopping</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'devoluciones', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-orange-100 rounded transition-colors border border-orange-200 bg-orange-50 min-h-[44px] touch-manipulation"
+                  >
+                    <RotateCcw size={14} className="text-orange-600" />
+                    <div className="text-sm font-medium">Devoluciones</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'beauty_care', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-pink-100 rounded transition-colors border border-pink-200 bg-pink-50 min-h-[44px] touch-manipulation"
+                  >
+                    <Heart size={14} className="text-pink-500" />
+                    <div className="text-sm font-medium">Beauty & Care</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'someday', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-indigo-100 rounded transition-colors border border-indigo-200 bg-indigo-50 min-h-[44px] touch-manipulation"
+                  >
+                    <Clock size={14} className="text-indigo-500" />
+                    <div className="text-sm font-medium">Someday</div>
                   </button>
                 </div>
               </div>

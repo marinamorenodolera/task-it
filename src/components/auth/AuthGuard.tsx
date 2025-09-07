@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import AuthScreen from '@/components/auth/AuthScreen'
 
@@ -10,11 +11,22 @@ interface AuthGuardProps {
 export default function AuthGuard({ children }: AuthGuardProps) {
   const { user, authLoading } = useAuth()
 
-  console.log('🛡️ AuthGuard - Estado:', { user: !!user, authLoading })
+  // Development logging moved to useEffect to avoid re-render logs
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🛡️ AuthGuard - Estado:', { user: !!user, authLoading })
+      if (authLoading) {
+        console.log('⏳ AuthGuard - Mostrando loading state')
+      } else if (!user) {
+        console.log('❌ AuthGuard - Sin usuario, mostrando AuthScreen')
+      } else {
+        console.log('✅ AuthGuard - Usuario autenticado, mostrando app protegida')
+      }
+    }
+  }, [user, authLoading])
 
   // Show loading while authentication is being checked
   if (authLoading) {
-    console.log('⏳ AuthGuard - Mostrando loading state')
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -27,11 +39,8 @@ export default function AuthGuard({ children }: AuthGuardProps) {
 
   // Show login screen if not authenticated
   if (!user) {
-    console.log('❌ AuthGuard - Sin usuario, mostrando AuthScreen')
     return <AuthScreen />
   }
-
-  console.log('✅ AuthGuard - Usuario autenticado, mostrando app protegida')
   // User is authenticated, show the protected content
   return <>{children}</>
 }

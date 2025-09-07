@@ -3,31 +3,20 @@
 import React, { useState, useEffect } from 'react'
 import { useTasks } from '@/hooks/useTasks'
 import { useAuth } from '@/hooks/useAuth'
-import { Plus, Calendar, Clock, Trash2, Target, CheckCircle2, Circle, Star, Flame, Folder, Settings, ListTodo, Mic, ChevronUp, ChevronDown, Check, X } from 'lucide-react'
-import TaskCard from '@/components/tasks/TaskCard'
-import SortableTaskCard from '@/components/tasks/SortableTaskCard'
+// Reduced lucide-react imports
+import { Plus, Calendar, Clock, Trash2, Target, CheckCircle2, Star, Flame, Folder, Settings, ListTodo, ChevronUp, ChevronDown, X, Inbox, CalendarDays, ShoppingCart, RotateCcw, Heart } from 'lucide-react'
+
+// Direct imports for stability  
 import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
 import SmartAttachmentsPanel from '@/components/attachments/SmartAttachmentsPanel'
-import { formatDeadline, parseNaturalLanguage } from '@/utils/dateHelpers'
+import SortableTaskCard from '@/components/tasks/SortableTaskCard'
+
+import { parseNaturalLanguage } from '@/utils/dateHelpers'
 import { triggerHapticFeedback } from '@/utils/haptics'
 
-// ✅ DND-KIT IMPORTS - IDENTICAL TO DAILY
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  useDroppable,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
+// Drag and drop imports
+import { DndContext, useSensor, useSensors, KeyboardSensor, PointerSensor, TouchSensor, useDroppable, closestCenter } from '@dnd-kit/core'
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 
 export default function SemanalPage() {
@@ -147,6 +136,17 @@ export default function SemanalPage() {
     }
   }, [workDays])
 
+  // Mover tareas vencidas al día de hoy cuando se cargan las tareas
+  useEffect(() => {
+    const handleOverdueTasks = async () => {
+      if (tasks && tasks.length > 0) {
+        await moveOverdueTasksToToday()
+      }
+    }
+    
+    handleOverdueTasks()
+  }, [tasks])
+
   // Función para obtener el color del día (estilo Daily)
   const getDayColor = (dayName: string) => {
     const colors: {[key: string]: string} = {
@@ -165,33 +165,86 @@ export default function SemanalPage() {
     return Calendar
   }
 
+  // Función para mover automáticamente tareas pasadas al día de hoy
+  const moveOverdueTasksToToday = async () => {
+    // Use the first workday (Monday) as "today" instead of system date
+    const today = workDays.length > 0 ? workDays[0].dateString : new Date().toISOString().split('T')[0]
+    
+    const overdueTasks = (tasks as Array<{page?: string, scheduled_date?: string, completed?: boolean, id: string, [key: string]: any}>).filter(task => {
+      const isWeeklyTask = task?.page === 'weekly'
+      const isNotCompleted = !task?.completed
+      const isPastTask = task?.scheduled_date && task.scheduled_date < today
+      
+      return isWeeklyTask && isNotCompleted && isPastTask
+    })
+
+    if (overdueTasks.length > 0) {
+      try {
+        // Move all tasks in parallel for better performance
+        const updatePromises = overdueTasks.map(task => {
+          return updateTask(task.id, {
+            scheduled_date: today
+          })
+        })
+        
+        // Wait for all updates to complete
+        await Promise.all(updatePromises)
+        
+        // Recargar tareas después de la actualización para asegurar sincronización
+        if (loadTasks) {
+          await loadTasks()
+        }
+      } catch (error) {
+        console.error(`❌ Error moviendo tareas vencidas:`, error)
+      }
+    }
+  }
+
   // Filtrar tareas para un día específico
   const getTasksForDay = (dateString: string) => {
+    // Use the first workday (Monday) as "today" instead of system date
+    const today = workDays.length > 0 ? workDays[0].dateString : new Date().toISOString().split('T')[0]
+    const isToday = dateString === today
+    
     const filtered = (tasks as Array<{page?: string, scheduled_date?: string, completed?: boolean, [key: string]: any}>).filter(task => {
       const matchPage = task?.page === 'weekly'
-      const matchDate = task?.scheduled_date === dateString
       const notCompleted = !task?.completed
       
-      // Debug logging
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔍 Filtrando tarea:', {
-          taskId: task.id,
-          taskTitle: task.title,
-          taskPage: task.page,
-          taskScheduledDate: task.scheduled_date,
-          filterDate: dateString,
-          matchPage,
-          matchDate,
-          notCompleted,
-          passesFilter: matchPage && matchDate && notCompleted
-        })
+      if (!matchPage || !notCompleted) return false
+      
+      const taskDate = task?.scheduled_date
+      
+      // Si es HOY, incluir tareas de HOY + tareas pasadas no completadas
+      if (isToday) {
+        const isPastTask = taskDate && taskDate < today
+        const isTodayTask = taskDate === dateString
+        
+        // Include past tasks on today view
+        
+        return isTodayTask || isPastTask
       }
       
-      return matchPage && matchDate && notCompleted
+      // Para otros días, comportamiento normal (solo tareas de ese día específico)
+      const matchDate = taskDate === dateString
+      
+      // Filter tasks for specific date
+      
+      return matchDate
     })
     
-    console.log(`📅 Tareas para ${dateString}:`, filtered.length, filtered)
     return filtered
+  }
+
+  // Get all past tasks for debugging purposes
+  const showAllPastTasks = () => {
+    // Use the first workday (Monday) as "today" instead of system date
+    const today = workDays.length > 0 ? workDays[0].dateString : new Date().toISOString().split('T')[0]
+    return (tasks as Array<{page?: string, scheduled_date?: string, completed?: boolean, [key: string]: any}>).filter(task => {
+      return task?.page === 'weekly' && 
+             !task?.completed && 
+             task?.scheduled_date && 
+             task.scheduled_date < today
+    })
   }
 
   // Obtener tareas completadas de esta semana 
@@ -329,14 +382,23 @@ export default function SemanalPage() {
     setShowTaskDetail(true)
   }
 
-  // ✅ DND-KIT HANDLERS - IDENTICAL TO DAILY
+  // ✅ DND-KIT HANDLERS - ENHANCED FOR SECTION DRAG
   const handleDragStart = (event: any) => {
     triggerHapticFeedback('medium')  // Vibración al activar drag
     const { active } = event
     setActiveId(active.id)
     
-    // Extract the taskId from the composite ID (day-taskId)
-    const taskId = active.id.split('-').slice(1).join('-')
+    // ✅ ENHANCED: Extract taskId from different composite ID formats
+    let taskId
+    const parts = active.id.split('-')
+    
+    if (parts.length >= 3) {
+      // Format: day-section-taskId (section-to-section drag)
+      taskId = parts.slice(2).join('-')
+    } else {
+      // Format: day-taskId (day-to-day drag)
+      taskId = parts.slice(1).join('-')
+    }
     
     // Find the task being dragged
     const task = tasks.find((t: any) => t.id === taskId)
@@ -377,25 +439,17 @@ export default function SemanalPage() {
     // Don't do anything if it's the same day
     if (sourceDay === targetDay) return
 
-    console.log('📦 Moving task:', {
-      taskId: draggedTask.id,
-      from: sourceDay,
-      to: targetDay
-    })
-
     try {
       const result = await updateTask(draggedTask.id, {
         scheduled_date: targetDay
       })
       
-      if (result && !result.error) {
-        console.log('✅ Task moved successfully')
-      } else {
-        console.error('❌ Error moving task:', result?.error)
+      if (result && result.error) {
+        console.error('Error moving task:', result.error)
         alert('Error al mover la tarea')
       }
     } catch (error) {
-      console.error('❌ Error in drag & drop:', error)
+      console.error('Error in drag & drop:', error)
       alert('Error al mover la tarea')
     }
   }
@@ -424,16 +478,10 @@ export default function SemanalPage() {
 
   // Cerrar detalle
   const handleCloseTaskDetail = () => {
-    console.log('🔙 Cerrando TaskDetail, estado actual:')
-    console.log('  - Total tasks:', tasks.length)
-    console.log('  - Tasks with page=weekly:', (tasks as Array<{page?: string, [key: string]: any}>).filter(t => t?.page === 'weekly').length)
-    console.log('  - Tasks for selected day:', getTasksForDay(selectedDay).length)
-    
     setShowTaskDetail(false)
     setSelectedTask(null)
     // Recargar tareas para reflejar cambios
     if (loadTasks) {
-      console.log('🔄 Recargando tareas...')
       loadTasks()
     }
   }
@@ -917,16 +965,16 @@ export default function SemanalPage() {
               {/* Inbox Sections */}
               <div>
                 <h4 className="text-base font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                  <ListTodo size={18} className="text-blue-600" />
-                  Inbox
+                  <Inbox size={18} className="text-blue-600" />
+                  Inbox Sections
                 </h4>
-                <div className="grid grid-cols-2 gap-2 ml-6">
+                <div className="grid grid-cols-2 gap-1 ml-6">
                   <button
                     onClick={async () => {
                       for (const taskId of selectedTasks) {
                         await updateTask(taskId, { 
                           page: 'inbox', 
-                          section: 'otras_tareas',
+                          section: 'inbox_tasks',
                           status: 'inbox',
                           scheduled_date: null
                         })
@@ -935,10 +983,85 @@ export default function SemanalPage() {
                       setSelectionMode(false)
                       setSelectedTasks([])
                     }}
-                    className="flex items-center gap-2 p-3 text-left hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 bg-blue-50"
+                    className="flex items-center gap-2 p-2 text-left hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 bg-blue-50 min-h-[44px] touch-manipulation"
                   >
-                    <ListTodo size={16} className="text-blue-500" />
+                    <Inbox size={14} className="text-blue-500" />
                     <div className="text-sm font-medium">Inbox</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'monthly', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-purple-100 rounded-lg transition-colors border border-purple-200 bg-purple-50 min-h-[44px] touch-manipulation"
+                  >
+                    <CalendarDays size={14} className="text-purple-500" />
+                    <div className="text-sm font-medium">Monthly</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'shopping', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-green-100 rounded-lg transition-colors border border-green-200 bg-green-50 min-h-[44px] touch-manipulation"
+                  >
+                    <ShoppingCart size={14} className="text-green-500" />
+                    <div className="text-sm font-medium">Shopping</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'devoluciones', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-orange-100 rounded-lg transition-colors border border-orange-200 bg-orange-50 min-h-[44px] touch-manipulation"
+                  >
+                    <RotateCcw size={14} className="text-orange-500" />
+                    <div className="text-sm font-medium">Devoluciones</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'beauty_care', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-pink-100 rounded-lg transition-colors border border-pink-200 bg-pink-50 min-h-[44px] touch-manipulation"
+                  >
+                    <Heart size={14} className="text-pink-500" />
+                    <div className="text-sm font-medium">Beauty & Care</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        await updateTask(taskId, { section: 'someday', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200 bg-indigo-50 min-h-[44px] touch-manipulation"
+                  >
+                    <Clock size={14} className="text-indigo-500" />
+                    <div className="text-sm font-medium">Someday</div>
                   </button>
                 </div>
               </div>
@@ -997,9 +1120,9 @@ export default function SemanalPage() {
                     setSelectedTasks([])
                   }
                 }}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg transition-colors min-h-[44px] touch-manipulation"
+                className="flex-1 flex items-center justify-center gap-1 py-2 text-sm text-red-600 hover:text-white hover:bg-red-600 transition-colors border border-red-300 rounded bg-red-50"
               >
-                <Trash2 size={16} />
+                <Trash2 size={12} />
                 Eliminar
               </button>
               <button

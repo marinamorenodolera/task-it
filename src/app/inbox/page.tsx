@@ -1,18 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import { Inbox, Calendar, ArrowRight, Plus, Clock, Trash2, X, ChevronRight, Circle, CheckCircle, Settings, CheckCircle2, ChevronUp, ChevronDown, Target, Flame, Star, ShoppingCart, CalendarDays } from 'lucide-react'
+// Reduce lucide-react imports to minimum essentials
+import { Plus, Clock, Trash2, X, ChevronRight, CheckCircle2, ChevronUp, ChevronDown, Settings, Inbox, Star, Calendar, CalendarDays, ShoppingCart, RotateCcw, Flame, Target, Heart } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
 import { useAuth } from '@/hooks/useAuth'
-import { formatDeadline, parseNaturalLanguage } from '@/utils/dateHelpers'
+import { parseNaturalLanguage } from '@/utils/dateHelpers'
 import { triggerHapticFeedback } from '@/utils/haptics'
+
+// Direct imports for stability
 import TaskDetailScreen from '@/components/tasks/TaskDetailScreen'
-import BaseButton from '@/components/ui/BaseButton'
-import SortableTaskCard from '@/components/tasks/SortableTaskCard'
 import SmartAttachmentsPanel from '@/components/attachments/SmartAttachmentsPanel'
+import SortableTaskCard from '@/components/tasks/SortableTaskCard'
+
+import BaseButton from '@/components/ui/BaseButton'
 import { SECTION_ICON_MAP } from '@/utils/sectionIcons'
 
-// ✅ DRAG AND DROP IMPORTS BÁSICOS
+// Standard drag and drop imports
 import {
   DndContext,
   closestCenter,
@@ -21,6 +25,7 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
+  useDroppable,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -29,6 +34,30 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+
+// ✅ DROPPABLE COMPONENT PARA SECCIONES VACÍAS EN INBOX
+const DroppableSection = ({ sectionId, children }: { 
+  sectionId: string; 
+  children: React.ReactNode 
+}) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: sectionId
+  })
+  
+  return (
+    <div 
+      ref={setNodeRef}
+      data-section={sectionId}
+      className={`transition-all duration-200 rounded-lg p-2 min-h-[44px] ${
+        isOver
+          ? 'bg-blue-50 ring-2 ring-blue-300 ring-opacity-50' 
+          : ''
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
 
 // Función helper para renderizar iconos de sección con colores correctos (copiada de TaskItApp)
 const renderSectionIconLocal = (sectionId: string, size: number = 20) => {
@@ -74,7 +103,8 @@ export default function InboxPage() {
     loadSubtasks,
     addSubtask,
     deleteSubtask,
-    updateSubtaskOrder
+    updateSubtaskOrder,
+    moveTaskBetweenSections
   } = useTasks()
   
   // Estados para attachments
@@ -101,15 +131,20 @@ export default function InboxPage() {
   const [selectedTask, setSelectedTask] = useState<any>(null)
   const [showTaskDetail, setShowTaskDetail] = useState(false)
   const [showCompletedTasks, setShowCompletedTasks] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   
   // Estados para gestionar tareas (copiado de Daily)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedTasks, setSelectedTasks] = useState<string[]>([])
   const [showMoveModal, setShowMoveModal] = useState(false)
   
-  // ✅ DRAG AND DROP STATE
+  // 💅 ESTADO PARA SELECCIÓN RÁPIDA DE SECCIÓN
+  const [selectedSection, setSelectedSection] = useState('inbox_tasks')
+  
+  // ✅ DRAG AND DROP STATE - ENHANCED FOR SECTION DRAG
   const [activeId, setActiveId] = useState(null)
   const [draggedTask, setDraggedTask] = useState<any>(null)
+  const [dragOverSection, setDragOverSection] = useState<string | null>(null)
   
   // ✅ DRAG AND DROP SENSORS
   const sensors = useSensors(
@@ -267,15 +302,22 @@ export default function InboxPage() {
 
   // Agregar nueva tarea al inbox
   const handleAddTask = async () => {
-    if (!newTaskTitle.trim()) return
+    // Prevenir múltiples submissions  
+    if (isSubmitting) return
+    setIsSubmitting(true)
     
-    const { deadline, amount } = parseNaturalLanguage(newTaskTitle)
+    if (!newTaskTitle.trim()) {
+      setIsSubmitting(false)
+      return
+    }
     
     try {
+      const { deadline, amount } = parseNaturalLanguage(newTaskTitle)
+      
       const result = await addTask({
         title: newTaskTitle,
         page: 'inbox',
-        section: 'otras_tareas',
+        section: selectedSection,
         status: 'inbox',
         deadline: taskDeadline ? new Date(taskDeadline) : deadline,
         amount,
@@ -298,13 +340,17 @@ export default function InboxPage() {
         setAttachments([])
         setTaskDeadline('')
         setShowAttachments(false)
+        setSelectedSection('inbox_tasks') // Reset a default
       }
     } catch (error) {
       console.error('Error adding task:', error)
+      alert('Error creando tarea: ' + (error as Error).message)
+    } finally {
+      setIsSubmitting(false)
     }
   }
   
-  // ✅ DRAG HANDLERS BÁSICOS
+  // ✅ DRAG HANDLERS - ENHANCED FOR SECTION DRAG
   const handleDragStart = (event: any) => {
     triggerHapticFeedback('medium')  // Vibración al activar drag
     const { active } = event
@@ -315,36 +361,142 @@ export default function InboxPage() {
     setDraggedTask(task)
   }
 
-  // ✅ DRAG END HANDLER - COPIADO DE DAILY Y ADAPTADO PARA INBOX
+  // ✅ DRAG OVER HANDLER - PARA HIGHLIGHT DE SECCIONES
+  const handleDragOver = (event: any) => {
+    const { over } = event
+    
+    if (!over || !draggedTask) {
+      setDragOverSection(null)
+      return
+    }
+
+    const overId = over.id
+    const draggedSection = draggedTask.section || 'inbox_tasks'
+    
+    // Detectar si estamos sobre una sección diferente
+    if (overId.includes('-')) {
+      // Es una tarea - extraer sección
+      const overSection = overId.split('-')[0]
+      
+      if (overSection !== draggedSection) {
+        setDragOverSection(overSection)
+      } else {
+        setDragOverSection(null)
+      }
+    } else {
+      // Es una sección droppable directamente
+      const validSections = ['inbox_tasks', 'urgent', 'quick', 'monthly', 'shopping', 'devoluciones']
+      if (validSections.includes(overId) && overId !== draggedSection) {
+        setDragOverSection(overId)
+      } else {
+        setDragOverSection(null)
+      }
+    }
+  }
+
+  // ✅ DRAG END HANDLER - ENHANCED FOR SECTION-TO-SECTION DRAG
   const handleDragEnd = async (event: any) => {
     const { active, over } = event
     
     setActiveId(null)
     setDraggedTask(null)
+    setDragOverSection(null)
 
     if (!over || active.id === over.id) {
       return
     }
 
-    // Extraer taskId de los IDs compuestos (formato: "inbox-taskId")
-    const activeTaskId = active.id.split('-').slice(1).join('-')
-    const overTaskId = over.id.split('-').slice(1).join('-')
+    // Extraer taskId y sectionId de los IDs compuestos
+    const activeParts = active.id.split('-')
+    const activeSection = activeParts[0]
+    const activeTaskId = activeParts.slice(1).join('-')
+    
+    // ✅ DETECTAR TIPO DE DROP
+    if (!over.id.includes('-')) {
+      // DROP EN SECCIÓN VACIA (droppable zone directa)
+      const targetSection = over.id
+      
+      console.log('🎯 INBOX CROSS-SECTION DRAG to empty section:', {
+        taskId: activeTaskId,
+        from: activeSection,
+        to: targetSection
+      })
+      
+      try {
+        const result = await moveTaskBetweenSections(
+          activeTaskId, 
+          activeSection === 'inbox' ? 'inbox_tasks' : activeSection, 
+          targetSection, 
+          null
+        )
+        
+        if (result?.error) {
+          console.error('❌ Error moving between sections:', result.error)
+          alert('Error al mover la tarea entre secciones')
+        }
+      } catch (error) {
+        console.error('❌ Error in cross-section drag:', error)
+        alert('Error al mover la tarea')
+      }
+      return
+    }
+    
+    // DROP EN TAREA (cross-section o reordering)
+    const overParts = over.id.split('-')
+    const overSection = overParts[0]
+    const overTaskId = overParts.slice(1).join('-')
 
-    console.log('🔄 INBOX REORDERING:', {
+    // ✅ DETECTAR MOVIMIENTO ENTRE SECCIONES
+    if (activeSection !== overSection) {
+      console.log('🔄 INBOX CROSS-SECTION DRAG to task:', {
+        taskId: activeTaskId,
+        from: activeSection,
+        to: overSection,
+        targetTaskId: overTaskId
+      })
+      
+      try {
+        const result = await moveTaskBetweenSections(
+          activeTaskId, 
+          activeSection === 'inbox' ? 'inbox_tasks' : activeSection,
+          overSection === 'inbox' ? 'inbox_tasks' : overSection, 
+          overTaskId
+        )
+        
+        if (result?.error) {
+          console.error('❌ Error moving between sections:', result.error)
+          alert('Error al mover la tarea entre secciones')
+        }
+      } catch (error) {
+        console.error('❌ Error in cross-section drag:', error)
+        alert('Error al mover la tarea')
+      }
+      return
+    }
+
+    // ✅ REORDENAMIENTO DENTRO DE LA MISMA SECCIÓN
+    console.log('🔄 INBOX REORDERING within section:', {
       activeTaskId,
-      overTaskId
+      overTaskId,
+      section: activeSection
     })
 
-    // ✅ REORDENAMIENTO DENTRO DE INBOX (lógica adaptada de Daily)
-    const oldIndex = inboxTasks.findIndex(task => task.id === activeTaskId)
-    const newIndex = inboxTasks.findIndex(task => task.id === overTaskId)
+    // Obtener tareas de la sección actual
+    const sectionTasks = inboxTasks.filter(task => {
+      const taskSection = task.section || 'inbox_tasks'
+      const normalizedActiveSection = activeSection === 'inbox' ? 'inbox_tasks' : activeSection
+      return taskSection === normalizedActiveSection
+    })
+    
+    const oldIndex = sectionTasks.findIndex(task => task.id === activeTaskId)
+    const newIndex = sectionTasks.findIndex(task => task.id === overTaskId)
 
     if (oldIndex === -1 || newIndex === -1) {
       return
     }
 
     // 1. REORDENAMIENTO OPTIMISTA INMEDIATO
-    const reorderedTasks = arrayMove(inboxTasks, oldIndex, newIndex)
+    const reorderedTasks = arrayMove(sectionTasks, oldIndex, newIndex)
     
     // ✅ ACTUALIZACIÓN OPTIMISTA INMEDIATA DE UI
     const updatedReorderedTasks = reorderedTasks.map((task, index) => ({
@@ -352,17 +504,11 @@ export default function InboxPage() {
       section_order: index + 1
     }))
 
-    // Actualizar estado inmediatamente sin recargar desde BD
-    const otherTasks = (tasks as any[]).filter(task => task.page !== 'inbox' || task.completed)
-    const newTasksArray = [...otherTasks, ...updatedReorderedTasks]
-    
-    // No tenemos setTasks en Inbox, así que recargaremos después de la actualización
-    
     // 2. PERSISTIR EN BD EN BACKGROUND
     try {
       for (let i = 0; i < reorderedTasks.length; i++) {
         const reorderedTask = reorderedTasks[i]
-        const originalIndex = inboxTasks.findIndex(t => t.id === reorderedTask.id)
+        const originalIndex = sectionTasks.findIndex(t => t.id === reorderedTask.id)
         const newOrder = i + 1
         const oldOrder = originalIndex + 1
         
@@ -446,6 +592,7 @@ export default function InboxPage() {
     }
   }
   
+  
   // Si hay una tarea seleccionada para ver detalles
   if (showTaskDetail && selectedTask) {
     return (
@@ -525,7 +672,7 @@ export default function InboxPage() {
             <BaseButton
               type="submit"
               title="Añadir tarea rápida"
-              disabled={!newTaskTitle.trim()}
+              disabled={isSubmitting || !newTaskTitle.trim()}
               onClick={(e: any) => {
                 if (e.type === 'click') {
                   e.preventDefault();
@@ -568,6 +715,135 @@ export default function InboxPage() {
             existingAttachments={[]}
           />
 
+          {/* 💅 SELECCIÓN RÁPIDA DE SECCIÓN - COPIADO DE DAILY */}
+          {newTaskTitle.trim() && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              <button
+                onClick={() => setSelectedSection(
+                  selectedSection === 'monthly' ? 'inbox_tasks' : 'monthly'
+                )}
+                className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                  selectedSection === 'monthly'
+                    ? 'border-purple-300 ring-2 ring-purple-200 bg-purple-50'
+                    : 'border-gray-200 hover:border-purple-200'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <CalendarDays 
+                    className={`${
+                      selectedSection === 'monthly' ? 'text-purple-600' : 'text-purple-500'
+                    }`}
+                    size={16}
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Monthly</span>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setSelectedSection(
+                  selectedSection === 'shopping' ? 'inbox_tasks' : 'shopping'
+                )}
+                className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                  selectedSection === 'shopping'
+                    ? 'border-green-300 ring-2 ring-green-200 bg-green-50'
+                    : 'border-gray-200 hover:border-green-200'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <ShoppingCart 
+                    className={`${
+                      selectedSection === 'shopping' ? 'text-green-600' : 'text-green-500'
+                    }`}
+                    size={16}
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Shopping</span>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setSelectedSection(
+                  selectedSection === 'devoluciones' ? 'inbox_tasks' : 'devoluciones'
+                )}
+                className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                  selectedSection === 'devoluciones'
+                    ? 'border-orange-300 ring-2 ring-orange-200 bg-orange-50'
+                    : 'border-gray-200 hover:border-orange-200'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <RotateCcw 
+                    className={`${
+                      selectedSection === 'devoluciones' ? 'text-orange-600' : 'text-orange-500'
+                    }`}
+                    size={16}
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Devoluciones</span>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setSelectedSection(
+                  selectedSection === 'beauty_care' ? 'inbox_tasks' : 'beauty_care'
+                )}
+                className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                  selectedSection === 'beauty_care'
+                    ? 'border-pink-300 ring-2 ring-pink-200 bg-pink-50'
+                    : 'border-gray-200 hover:border-pink-200'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <Heart 
+                    className={`${
+                      selectedSection === 'beauty_care' ? 'text-pink-600' : 'text-pink-500'
+                    }`}
+                    size={16}
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Beauty</span>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setSelectedSection(
+                  selectedSection === 'someday' ? 'inbox_tasks' : 'someday'
+                )}
+                className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                  selectedSection === 'someday'
+                    ? 'border-indigo-300 ring-2 ring-indigo-200 bg-indigo-50'
+                    : 'border-gray-200 hover:border-indigo-200'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <Clock 
+                    className={`${
+                      selectedSection === 'someday' ? 'text-indigo-600' : 'text-indigo-500'
+                    }`}
+                    size={16}
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Someday</span>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setSelectedSection('inbox_tasks')}
+                className={`bg-white border rounded-xl p-2 shadow-sm hover:shadow-md transition-all duration-200 min-h-[36px] touch-manipulation ${
+                  selectedSection === 'inbox_tasks'
+                    ? 'border-blue-300 ring-2 ring-blue-200 bg-blue-50'
+                    : 'border-gray-200 hover:border-blue-200'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <Inbox 
+                    className={`${
+                      selectedSection === 'inbox_tasks' ? 'text-blue-600' : 'text-blue-500'
+                    }`}
+                    size={16}
+                  />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">Inbox</span>
+                </div>
+              </button>
+            </div>
+          )}
+
           {/* ✅ GESTIONAR TAREAS - INTEGRADO COMO DAILY */}
           <div className="flex gap-2 mt-3">
             <button
@@ -606,22 +882,30 @@ export default function InboxPage() {
             task.estimated_duration && task.estimated_duration <= 30
           )
           
+          // 🛡️ PRESERVAR SECCIONES EXISTENTES - NO MODIFICAR
           const monthlyTasks = inboxTasks.filter(task => task.section === 'monthly')
           const shoppingTasks = inboxTasks.filter(task => task.section === 'shopping')
+          const devolucionesTasks = inboxTasks.filter(task => task.section === 'devoluciones')
+          const beautyCareTask = inboxTasks.filter(task => task.section === 'beauty_care')
+          const somedayTasks = inboxTasks.filter(task => task.section === 'someday')
           // COMPATIBILITY: Support old 'otras_tareas' and new 'inbox_tasks'
           const inboxTasksOnly = inboxTasks.filter(task => 
             task.section === 'inbox_tasks' || 
             (task.section === 'otras_tareas' && !task.priority)
           )
           
-          // DEBUG: Log para verificar filtros
-          console.log('🔍 DEBUG INBOX SECTIONS:')
-          console.log('Total inboxTasks:', inboxTasks.length)
-          console.log('All section values:', [...new Set(inboxTasks.map(t => t.section))])
-          console.log('All priority values:', [...new Set(inboxTasks.map(t => t.priority))])
-          console.log('Monthly tasks:', monthlyTasks.length, monthlyTasks.map(t => ({id: t.id, section: t.section, title: t.title})))
-          console.log('Shopping tasks:', shoppingTasks.length, shoppingTasks.map(t => ({id: t.id, section: t.section, title: t.title})))
-          console.log('Inbox Tasks Only:', inboxTasksOnly.length, inboxTasksOnly.map(t => ({id: t.id, section: t.section, title: t.title})))
+          
+          // DEBUG: Moved outside render to prevent infinite loops
+          if (process.env.NODE_ENV === 'development') {
+            // Only log when tasks actually change, not on every render
+            const currentTaskIds = inboxTasks.map(t => t.id).join(',')
+            if (window.lastTaskIds !== currentTaskIds) {
+              window.lastTaskIds = currentTaskIds
+              console.log('🔍 INBOX SECTIONS DEBUG (tasks changed):')
+              console.log('Total inboxTasks:', inboxTasks.length)
+              console.log('Monthly:', monthlyTasks.length, 'Shopping:', shoppingTasks.length, 'Devoluciones:', devolucionesTasks.length, 'Inbox Only:', inboxTasksOnly.length)
+            }
+          }
 
           return (
             <DndContext
@@ -629,7 +913,13 @@ export default function InboxPage() {
               collisionDetection={closestCenter}
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
               modifiers={[restrictToVerticalAxis]}
+              accessibility={{
+                screenReaderInstructions: {
+                  draggable: 'Para mover entre secciones, mantén presionado y arrastra'
+                }
+              }}
             >
               <SortableContext 
                 items={[
@@ -637,7 +927,10 @@ export default function InboxPage() {
                   ...urgentTasks.map(task => `urgent-${task.id}`),
                   ...quickTasks.map(task => `quick-${task.id}`),
                   ...monthlyTasks.map(task => `monthly-${task.id}`),
-                  ...shoppingTasks.map(task => `shopping-${task.id}`)
+                  ...shoppingTasks.map(task => `shopping-${task.id}`),
+                  ...devolucionesTasks.map(task => `devoluciones-${task.id}`),
+                  ...beautyCareTask.map(task => `beauty_care-${task.id}`),
+                  ...somedayTasks.map(task => `someday-${task.id}`)
                 ]}
                 strategy={verticalListSortingStrategy}
               >
@@ -745,18 +1038,35 @@ export default function InboxPage() {
                         </div>
                       )}
 
-                      {/* 📅 MONTHLY - SIEMPRE VISIBLE */}
-                      <div>
+                      {/* 📅 MONTHLY - SIEMPRE VISIBLE CON DROPPABLE */}
+                      <DroppableSection sectionId="monthly">
                         <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                           <CalendarDays size={20} className="text-purple-500" />
                           Monthly ({monthlyTasks.length})
+                          {dragOverSection === 'monthly' && (
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium animate-pulse">
+                              SOLTAR AQUÍ
+                            </span>
+                          )}
                         </h2>
                         
                         {/* Section divider */}
                         <div className="border-b border-gray-200/30 mx-0 my-3"></div>
                         
                         {monthlyTasks.length === 0 ? (
-                          <div></div>
+                          <div className={`text-center py-8 text-gray-400 rounded-lg border-2 border-dashed transition-all ${
+                            dragOverSection === 'monthly' 
+                              ? 'bg-purple-100 border-purple-300 text-purple-600' 
+                              : 'bg-gray-50 border-gray-200'
+                          }`}>
+                            <CalendarDays size={32} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">
+                              {dragOverSection === 'monthly' && draggedTask 
+                                ? 'Suelta la tarea aquí' 
+                                : 'No hay tareas mensuales'
+                              }
+                            </p>
+                          </div>
                         ) : (
                           <div className="space-y-2">
                             {monthlyTasks.map((task) => (
@@ -776,20 +1086,37 @@ export default function InboxPage() {
                             ))}
                           </div>
                         )}
-                      </div>
+                      </DroppableSection>
 
-                      {/* 🛒 SHOPPING - SIEMPRE VISIBLE */}
-                      <div>
+                      {/* 🛒 SHOPPING - SIEMPRE VISIBLE CON DROPPABLE */}
+                      <DroppableSection sectionId="shopping">
                         <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                           <ShoppingCart size={20} className="text-green-500" />
                           Shopping ({shoppingTasks.length})
+                          {dragOverSection === 'shopping' && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium animate-pulse">
+                              SOLTAR AQUÍ
+                            </span>
+                          )}
                         </h2>
                         
                         {/* Section divider */}
                         <div className="border-b border-gray-200/30 mx-0 my-3"></div>
                         
                         {shoppingTasks.length === 0 ? (
-                          <div></div>
+                          <div className={`text-center py-8 text-gray-400 rounded-lg border-2 border-dashed transition-all ${
+                            dragOverSection === 'shopping' 
+                              ? 'bg-green-100 border-green-300 text-green-600' 
+                              : 'bg-gray-50 border-gray-200'
+                          }`}>
+                            <ShoppingCart size={32} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">
+                              {dragOverSection === 'shopping' && draggedTask 
+                                ? 'Suelta la tarea aquí' 
+                                : 'No hay tareas de compras'
+                              }
+                            </p>
+                          </div>
                         ) : (
                           <div className="space-y-2">
                             {shoppingTasks.map((task) => (
@@ -809,7 +1136,157 @@ export default function InboxPage() {
                             ))}
                           </div>
                         )}
-                      </div>
+                      </DroppableSection>
+
+                      {/* 🔄 DEVOLUCIONES - SIEMPRE VISIBLE CON DROPPABLE */}
+                      <DroppableSection sectionId="devoluciones">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <RotateCcw size={20} className="text-orange-500" />
+                          Devoluciones ({devolucionesTasks.length})
+                          {dragOverSection === 'devoluciones' && (
+                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium animate-pulse">
+                              SOLTAR AQUÍ
+                            </span>
+                          )}
+                        </h2>
+                        
+                        {/* Section divider */}
+                        <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+                        
+                        {devolucionesTasks.length === 0 ? (
+                          <div className={`text-center py-8 text-gray-400 rounded-lg border-2 border-dashed transition-all ${
+                            dragOverSection === 'devoluciones' 
+                              ? 'bg-orange-100 border-orange-300 text-orange-600' 
+                              : 'bg-gray-50 border-gray-200'
+                          }`}>
+                            <RotateCcw size={32} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">
+                              {dragOverSection === 'devoluciones' && draggedTask 
+                                ? 'Suelta la tarea aquí' 
+                                : 'No hay devoluciones'
+                              }
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {devolucionesTasks.map((task) => (
+                              <SortableTaskCard
+                                key={`devoluciones-${task.id}`}
+                                task={task}
+                                sectionId="devoluciones"
+                                onClick={selectionMode ? () => handleTaskSelection(task.id) : () => handleTaskClick(task)}
+                                onComplete={toggleComplete}
+                                expandedTasks={[]}
+                                onToggleExpanded={() => {}}
+                                onToggleTaskComplete={toggleComplete}
+                                getSubtasks={() => []}
+                                selectionMode={selectionMode}
+                                isSelected={selectedTasks.includes(task.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </DroppableSection>
+
+                      {/* 💅 BEAUTY & CARE - SIEMPRE VISIBLE CON DROPPABLE */}
+                      <DroppableSection sectionId="beauty_care">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <Heart size={20} className="text-pink-500" />
+                          Beauty & Care ({beautyCareTask.length})
+                          {dragOverSection === 'beauty_care' && (
+                            <span className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full font-medium animate-pulse">
+                              SOLTAR AQUÍ
+                            </span>
+                          )}
+                        </h2>
+                        
+                        {/* Section divider */}
+                        <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+                        
+                        {beautyCareTask.length === 0 ? (
+                          <div className={`text-center py-8 text-gray-400 rounded-lg border-2 border-dashed transition-all ${
+                            dragOverSection === 'beauty_care' 
+                              ? 'bg-pink-100 border-pink-300 text-pink-600' 
+                              : 'bg-gray-50 border-gray-200'
+                          }`}>
+                            <Heart size={32} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">
+                              {dragOverSection === 'beauty_care' && draggedTask 
+                                ? 'Suelta la tarea aquí' 
+                                : 'No hay tareas de belleza'
+                              }
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {beautyCareTask.map((task) => (
+                              <SortableTaskCard
+                                key={`beauty_care-${task.id}`}
+                                task={task}
+                                sectionId="beauty_care"
+                                onClick={selectionMode ? () => handleTaskSelection(task.id) : () => handleTaskClick(task)}
+                                onComplete={toggleComplete}
+                                expandedTasks={[]}
+                                onToggleExpanded={() => {}}
+                                onToggleTaskComplete={toggleComplete}
+                                getSubtasks={() => []}
+                                selectionMode={selectionMode}
+                                isSelected={selectedTasks.includes(task.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </DroppableSection>
+
+                      {/* ⏰ SOMEDAY - SIEMPRE VISIBLE CON DROPPABLE */}
+                      <DroppableSection sectionId="someday">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <Clock size={20} className="text-indigo-500" />
+                          Someday ({somedayTasks.length})
+                          {dragOverSection === 'someday' && (
+                            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full font-medium animate-pulse">
+                              SOLTAR AQUÍ
+                            </span>
+                          )}
+                        </h2>
+                        
+                        {/* Section divider */}
+                        <div className="border-b border-gray-200/30 mx-0 my-3"></div>
+                        
+                        {somedayTasks.length === 0 ? (
+                          <div className={`text-center py-8 text-gray-400 rounded-lg border-2 border-dashed transition-all ${
+                            dragOverSection === 'someday' 
+                              ? 'bg-indigo-100 border-indigo-300 text-indigo-600' 
+                              : 'bg-gray-50 border-gray-200'
+                          }`}>
+                            <Clock size={32} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">
+                              {dragOverSection === 'someday' && draggedTask 
+                                ? 'Suelta la tarea aquí' 
+                                : 'No hay tareas para después'
+                              }
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {somedayTasks.map((task) => (
+                              <SortableTaskCard
+                                key={`someday-${task.id}`}
+                                task={task}
+                                sectionId="someday"
+                                onClick={selectionMode ? () => handleTaskSelection(task.id) : () => handleTaskClick(task)}
+                                onComplete={toggleComplete}
+                                expandedTasks={[]}
+                                onToggleExpanded={() => {}}
+                                onToggleTaskComplete={toggleComplete}
+                                getSubtasks={() => []}
+                                selectionMode={selectionMode}
+                                isSelected={selectedTasks.includes(task.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </DroppableSection>
                     </>
                   )}
                 </div>
@@ -1008,7 +1485,7 @@ export default function InboxPage() {
                   <Inbox size={18} className="text-blue-600" />
                   Inbox Sections
                 </h4>
-                <div className="grid grid-cols-3 gap-1 ml-6">
+                <div className="grid grid-cols-2 gap-1 ml-6">
                   <button
                     onClick={async () => {
                       for (const taskId of selectedTasks) {
@@ -1059,6 +1536,38 @@ export default function InboxPage() {
                   >
                     <ShoppingCart size={14} className="text-green-500" />
                     <div className="text-sm font-medium">Shopping</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        console.log('🔄 Moving to Devoluciones:', taskId, { section: 'devoluciones', page: 'inbox' })
+                        await updateTask(taskId, { section: 'devoluciones', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-orange-100 rounded transition-colors border border-orange-200 bg-orange-50 min-h-[44px] touch-manipulation"
+                  >
+                    <RotateCcw size={14} className="text-orange-500" />
+                    <div className="text-sm font-medium">Devoluciones</div>
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      for (const taskId of selectedTasks) {
+                        console.log('🔄 Moving to Beauty & Care:', taskId, { section: 'beauty_care', page: 'inbox' })
+                        await updateTask(taskId, { section: 'beauty_care', page: 'inbox' })
+                      }
+                      setShowMoveModal(false)
+                      setSelectionMode(false)
+                      setSelectedTasks([])
+                    }}
+                    className="flex items-center gap-2 p-2 text-left hover:bg-pink-100 rounded transition-colors border border-pink-200 bg-pink-50 min-h-[44px] touch-manipulation"
+                  >
+                    <Heart size={14} className="text-pink-500" />
+                    <div className="text-sm font-medium">Beauty & Care</div>
                   </button>
                 </div>
               </div>
@@ -1133,6 +1642,7 @@ export default function InboxPage() {
           </div>
         </div>
       )}
+
 
       {/* Bottom padding para el nav */}
       <div className="h-20" />

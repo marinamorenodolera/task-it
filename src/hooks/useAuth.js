@@ -27,7 +27,12 @@ export const AuthProvider = ({ children }) => {
   const [mounted, setMounted] = useState(false)
   const [authState, setAuthState] = useState('initializing') // initializing, authenticated, unauthenticated, error
 
-  console.log('🔐 AuthProvider - Estado:', { authState, user: !!user, profile: !!profile, mounted })
+  // Development logging moved to useEffect to avoid re-render logs
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔐 AuthProvider - Estado:', { authState, user: !!user, profile: !!profile, mounted })
+    }
+  }, [authState, user, profile, mounted])
 
   // Wait for client hydration
   useEffect(() => {
@@ -38,7 +43,9 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!mounted) return
 
-    console.log('🔐 Inicializando autenticación después de hydratación...')
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔐 Inicializando autenticación después de hydratación...')
+    }
 
     const initializeAuth = async () => {
       try {
@@ -47,15 +54,19 @@ export const AuthProvider = ({ children }) => {
         // Get existing session AFTER hydration
         const { data: { session }, error } = await supabase.auth.getSession()
         
-        console.log('🔐 Sesión obtenida:', { 
-          session: !!session, 
-          user: !!session?.user,
-          email: session?.user?.email,
-          error: !!error 
-        })
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔐 Sesión obtenida:', { 
+            session: !!session, 
+            user: !!session?.user,
+            email: session?.user?.email,
+            error: !!error 
+          })
+        }
         
         if (session && !error) {
-          console.log('🔐 ✅ Sesión válida encontrada, cargando perfil...')
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔐 ✅ Sesión válida encontrada, cargando perfil...')
+          }
           
           // Load user profile
           const { data: profileData } = await supabase
@@ -65,18 +76,24 @@ export const AuthProvider = ({ children }) => {
             .single()
           
           if (profileData) {
-            console.log('🔐 ✅ Perfil cargado exitosamente')
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔐 ✅ Perfil cargado exitosamente')
+            }
             setUser(session.user)
             setProfile(profileData)
             setAuthState('authenticated')
           } else {
-            console.log('🔐 ⚠️ No se encontró perfil, pero usuario autenticado')
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔐 ⚠️ No se encontró perfil, pero usuario autenticado')
+            }
             setUser(session.user)
             setProfile(null)
             setAuthState('authenticated')
           }
         } else {
-          console.log('🔐 ❌ No hay sesión válida')
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔐 ❌ No hay sesión válida')
+          }
           setUser(null)
           setProfile(null)
           setAuthState('unauthenticated')
@@ -94,10 +111,14 @@ export const AuthProvider = ({ children }) => {
     // Setup auth listener ONLY after initialization
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔐 Auth state change:', { event, session: !!session })
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔐 Auth state change:', { event, session: !!session })
+        }
         
         if (event === 'SIGNED_IN' && session) {
-          console.log('🔐 ✅ Usuario logueado, cargando perfil...')
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔐 ✅ Usuario logueado, cargando perfil...')
+          }
           
           // Load profile for signed in user
           const { data: profileData } = await supabase
@@ -111,7 +132,9 @@ export const AuthProvider = ({ children }) => {
           setAuthState('authenticated')
           
         } else if (event === 'SIGNED_OUT') {
-          console.log('🔐 ❌ Usuario deslogueado')
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔐 ❌ Usuario deslogueado')
+          }
           setUser(null)
           setProfile(null)
           setAuthState('unauthenticated')
@@ -120,7 +143,9 @@ export const AuthProvider = ({ children }) => {
     )
     
     return () => {
-      console.log('🔐 Limpiando subscription')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔐 Limpiando subscription')
+      }
       subscription?.unsubscribe()
     }
   }, [mounted])
@@ -138,15 +163,21 @@ export const AuthProvider = ({ children }) => {
       })
 
       if (error) {
-        console.error('🔐 SignUp error:', error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('🔐 SignUp error:', error)
+        }
         setAuthState('unauthenticated')
         return { data: null, error }
       }
 
-      console.log('🔐 ✅ SignUp exitoso')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔐 ✅ SignUp exitoso')
+      }
       return { data, error: null }
     } catch (error) {
-      console.error('🔐 SignUp catch error:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('🔐 SignUp catch error:', error)
+      }
       setAuthState('error')
       return { data: null, error }
     }
@@ -162,16 +193,22 @@ export const AuthProvider = ({ children }) => {
       })
 
       if (error) {
-        console.error('🔐 SignIn error:', error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('🔐 SignIn error:', error)
+        }
         setAuthState('unauthenticated')
         return { data: null, error }
       }
 
-      console.log('🔐 ✅ SignIn exitoso')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔐 ✅ SignIn exitoso')
+      }
       // El estado se actualizará automáticamente via onAuthStateChange
       return { data, error: null }
     } catch (error) {
-      console.error('🔐 SignIn catch error:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('🔐 SignIn catch error:', error)
+      }
       setAuthState('error')
       return { data: null, error }
     }
@@ -184,15 +221,21 @@ export const AuthProvider = ({ children }) => {
       const { error } = await supabase.auth.signOut()
       
       if (error) {
-        console.error('🔐 SignOut error:', error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('🔐 SignOut error:', error)
+        }
         return { error }
       }
       
-      console.log('🔐 ✅ SignOut exitoso')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔐 ✅ SignOut exitoso')
+      }
       // El estado se actualizará automáticamente via onAuthStateChange
       return { error: null }
     } catch (error) {
-      console.error('🔐 SignOut catch error:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('🔐 SignOut catch error:', error)
+      }
       setAuthState('error')
       return { error }
     }
@@ -214,7 +257,9 @@ export const AuthProvider = ({ children }) => {
       setProfile(data)
       return { data, error: null }
     } catch (error) {
-      console.error('🔐 Profile update error:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('🔐 Profile update error:', error)
+      }
       return { data: null, error }
     }
   }

@@ -3,24 +3,15 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import ClientRootLayout from '@/components/ClientRootLayout'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ 
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false
+})
 
 export const metadata: Metadata = {
   title: 'Task-it - Free to Focus',
   description: 'Productividad inteligente con metodología GTD + Eisenhower Matrix',
-  manifest: '/manifest.json',
-  icons: {
-    apple: '/icon-192x192.png',
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'Task-it',
-  },
-  other: {
-    'apple-mobile-web-app-status-bar-style': 'default',
-    'msapplication-navbutton-color': '#ffffff',
-  },
 }
 
 export const viewport = {
@@ -28,7 +19,6 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#ffffff',
 }
 
 export default function RootLayout({

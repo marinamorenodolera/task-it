@@ -5,7 +5,6 @@ import { AuthProvider } from '@/hooks/useAuth'
 import AuthGuard from '@/components/auth/AuthGuard'
 import BottomNavigation from '@/components/ui/BottomNavigation'
 import { NavigationProvider, useNavigation } from '@/hooks/useNavigation'
-import PWAUpdatePrompt from '@/components/PWAUpdatePrompt'
 
 interface ClientRootLayoutProps {
   children: React.ReactNode
@@ -28,6 +27,23 @@ export default function ClientRootLayout({ children }: ClientRootLayoutProps) {
       console.error('Global error:', event.error)
     }
 
+    // Unregister any existing service workers
+    const unregisterServiceWorkers = async () => {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations()
+          for (const registration of registrations) {
+            console.log('Unregistering service worker:', registration.scope)
+            await registration.unregister()
+          }
+          console.log('All service workers unregistered')
+        } catch (error) {
+          console.error('Error unregistering service workers:', error)
+        }
+      }
+    }
+
+    unregisterServiceWorkers()
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
     window.addEventListener('error', handleError)
 
@@ -45,7 +61,6 @@ export default function ClientRootLayout({ children }: ClientRootLayoutProps) {
             {children}
           </div>
           <BottomNavigationWrapper />
-          <PWAUpdatePrompt />
         </AuthGuard>
       </NavigationProvider>
     </AuthProvider>

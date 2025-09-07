@@ -9,7 +9,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { triggerHapticFeedback } from '@/utils/haptics'
 import { TASK_SECTIONS, getSectionColorClasses } from '../../config/taskSections'
 import { SECTION_ICON_MAP } from '@/utils/sectionIcons'
-import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, Inbox, MapPin, FileText, User, Trash2, Flame, Target, ChevronRight, CalendarDays, ShoppingCart, Image, StickyNote } from 'lucide-react'
+import { ArrowLeft, Edit3, X, Plus, CheckCircle, Circle, CircleCheck, Star, StarOff, Calendar, Link, Euro, Clock, Inbox, MapPin, FileText, User, Trash2, Flame, Target, ChevronRight, CalendarDays, ShoppingCart, Image, StickyNote, RotateCcw, Heart } from 'lucide-react'
 // ✅ DRAG AND DROP IMPORTS EXACTOS COMO Daily
 import {
   DndContext,
@@ -85,6 +85,9 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     if (currentTask.section === 'inbox_tasks') return 'normal'
     if (currentTask.section === 'monthly') return 'monthly'
     if (currentTask.section === 'shopping') return 'shopping'
+    if (currentTask.section === 'devoluciones') return 'devoluciones'
+    if (currentTask.section === 'beauty_care') return 'beauty_care'
+    if (currentTask.section === 'someday') return 'someday'
     
     // Fallback por compatibilidad
     if (currentTask.completed) return 'completadas'
@@ -365,7 +368,10 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
       'normal': 'Otras Tareas',
       'completadas': 'Completadas',
       'monthly': 'Monthly',
-      'shopping': 'Shopping'
+      'shopping': 'Shopping',
+      'devoluciones': 'Devoluciones',
+      'beauty_care': 'Beauty & Care',
+      'someday': 'Someday'
     }
     
     const pageName = pageNames[page] || 'Daily'
@@ -396,6 +402,9 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
     if (currentSection === 'en_espera') return <Clock size={18} className="text-orange-500" />
     if (currentSection === 'monthly') return <CalendarDays size={18} className="text-purple-500" />
     if (currentSection === 'shopping') return <ShoppingCart size={18} className="text-green-500" />
+    if (currentSection === 'devoluciones') return <RotateCcw size={18} className="text-orange-600" />
+    if (currentSection === 'beauty_care') return <Heart size={18} className="text-pink-500" />
+    if (currentSection === 'someday') return <Clock size={18} className="text-indigo-500" />
     
     return <FileText size={18} className="text-blue-500" />
   }
@@ -603,6 +612,54 @@ const TaskDetailScreen = ({ task, onBack, onEdit, onDelete, onToggleComplete, on
               >
                 <ShoppingCart size={16} className="text-green-500" />
                 <div className="text-sm font-medium">Shopping</div>
+              </button>
+              
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { 
+                    page: 'inbox', 
+                    section: 'devoluciones',
+                    status: 'inbox',
+                    scheduled_date: null
+                  }),
+                  { page: 'inbox', section: 'devoluciones', status: 'inbox', scheduled_date: null }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-orange-100 rounded-lg transition-colors border border-orange-200 bg-orange-50"
+              >
+                <RotateCcw size={16} className="text-orange-600" />
+                <div className="text-sm font-medium">Devoluciones</div>
+              </button>
+              
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { 
+                    page: 'inbox', 
+                    section: 'beauty_care',
+                    status: 'inbox',
+                    scheduled_date: null
+                  }),
+                  { page: 'inbox', section: 'beauty_care', status: 'inbox', scheduled_date: null }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-pink-100 rounded-lg transition-colors border border-pink-200 bg-pink-50"
+              >
+                <Heart size={16} className="text-pink-500" />
+                <div className="text-sm font-medium">Beauty & Care</div>
+              </button>
+              
+              <button
+                onClick={() => handleBulkOperation(
+                  (taskId) => onUpdate(taskId, { 
+                    page: 'inbox', 
+                    section: 'someday',
+                    status: 'inbox',
+                    scheduled_date: null
+                  }),
+                  { page: 'inbox', section: 'someday', status: 'inbox', scheduled_date: null }
+                )}
+                className="flex items-center gap-2 p-3 text-left hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200 bg-indigo-50"
+              >
+                <Clock size={16} className="text-indigo-500" />
+                <div className="text-sm font-medium">Someday</div>
               </button>
             </div>
           </div>

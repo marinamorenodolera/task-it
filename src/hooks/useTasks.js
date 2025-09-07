@@ -118,11 +118,51 @@ export const useTasks = () => {
 
   // Add task
   const addTask = async (taskData) => {
+    // Prevenir llamadas duplicadas
+    if (addTask.isRunning) {
+      console.log('⚠️ addTask ya está ejecutándose, ignorando duplicado')
+      return { data: null, error: 'Already running' }
+    }
+    addTask.isRunning = true
+
     if (!user?.id) {
       console.error('❌ addTask: Usuario no autenticado')
+      addTask.isRunning = false
       return { error: 'Usuario no autenticado' }
     }
 
+    // Timeout para prevenir requests colgados
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    })
+
+    // Optimistic update - añadir inmediatamente a la UI
+    const optimisticTask = {
+      id: 'temp-' + Date.now(),
+      title: taskData.title,
+      description: taskData.notes || taskData.description || '',
+      notes: taskData.notes || taskData.description || '',
+      completed: false,
+      important: taskData.important || false,
+      priority: taskData.priority || 'normal',
+      addedAt: new Date(),
+      deadline: taskData.deadline || null,
+      amount: taskData.amount || null,
+      link: taskData.link || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      attachments: [],
+      parent_task_id: taskData.parent_task_id || null,
+      subtask_order: 0,
+      section_order: 0,
+      is_expanded: false,
+      status: taskData.status || 'inbox',
+      page: taskData.page || 'daily',
+      section: taskData.section || 'inbox_tasks',
+      scheduled_date: taskData.scheduled_date || null
+    }
+    
+    setTasks(prev => [optimisticTask, ...prev])
 
     try {
       // Preparar datos para Supabase - solo campos esenciales para evitar error 400
@@ -138,28 +178,31 @@ export const useTasks = () => {
         priority: taskData.priority || 'normal',
         status: taskData.status || 'inbox',
         page: taskData.page || 'daily',
-        section: taskData.section || 'otras_tareas',  // Keep default for new tasks
+        section: taskData.section || 'inbox_tasks',  // Default to inbox_tasks for new tasks
         scheduled_date: taskData.scheduled_date || null  // Importante para tareas semanales
       }
       
       // Solo agregar campos opcionales si están definidos
       if (taskData.parent_task_id) dbData.parent_task_id = taskData.parent_task_id
       
+      // 🔍 DEBUG: Log data being sent to Supabase
+      console.log('📤 Sending to Supabase:', dbData)
 
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert(dbData)
-        .select()
-        .single()
+      const { data, error } = await Promise.race([
+        supabase.from('tasks').insert(dbData).select().single(),
+        timeoutPromise
+      ])
 
 
       if (error) {
         console.error('Error de Supabase:', error)
+        // Rollback optimistic si falla
+        setTasks(prev => prev.filter(t => t.id !== optimisticTask.id))
+        addTask.isRunning = false
         throw error
       }
 
-
-      // Map to component format and add to state
+      // Reemplazar optimistic con real task
       const newTask = {
         id: data.id,
         title: data.title,
@@ -187,22 +230,22 @@ export const useTasks = () => {
         scheduled_date: data.scheduled_date || null  // Para tareas semanales
       }
       
-      console.log('🆕 Nueva tarea creada y mapeada:', {
-        id: newTask.id,
-        title: newTask.title,
-        page: newTask.page,
-        scheduled_date: newTask.scheduled_date,
-        section: newTask.section
-      })
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🆕 Nueva tarea creada:', { id: newTask.id, section: newTask.section })
+      }
 
-      setTasks(prev => {
-        const updated = [newTask, ...prev]
-        console.log('📝 Estado de tareas actualizado:', updated.length, 'tareas')
-        return updated
-      })
+      // Reemplazar optimistic con real
+      setTasks(prev => prev.map(t => 
+        t.id === optimisticTask.id ? newTask : t
+      ))
+      
+      addTask.isRunning = false
       return { data: newTask, error: null }
     } catch (err) {
       console.error('Error en addTask:', err)
+      // Rollback optimistic si falla
+      setTasks(prev => prev.filter(t => t.id !== optimisticTask.id))
+      addTask.isRunning = false
       return { data: null, error: err.message }
     }
   }
@@ -253,7 +296,9 @@ export const useTasks = () => {
       if (cleanUpdates.scheduled_date !== undefined) dbUpdates.scheduled_date = cleanUpdates.scheduled_date
       if (cleanUpdates.assigned_day !== undefined) dbUpdates.assigned_day = cleanUpdates.assigned_day
 
-      console.log('📝 UpdateTask DB Updates:', { taskId, dbUpdates })
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📝 UpdateTask:', taskId, Object.keys(dbUpdates))
+      }
       
       const { data, error } = await supabase
         .from('tasks')
@@ -834,8 +879,70 @@ export const useTasks = () => {
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
-            // Reload tasks on any change
-            loadTasks()
+            // ✅ PERFORMANCE FIX: Handle real-time updates without full reload
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔄 Real-time task change:', payload.eventType, payload.new?.id)
+            }
+            
+            if (payload.eventType === 'INSERT' && payload.new) {
+              // Add new task to state without full reload
+              const newTask = {
+                id: payload.new.id,
+                title: payload.new.title,
+                text: payload.new.title,
+                description: payload.new.description,
+                notes: payload.new.description,
+                completed: payload.new.completed,
+                important: payload.new.is_big_3_today,
+                status: payload.new.status || 'inbox',
+                priority: payload.new.priority || 'normal',
+                page: payload.new.page || 'daily',
+                section: payload.new.section,
+                scheduled_date: payload.new.scheduled_date,
+                parent_task_id: payload.new.parent_task_id,
+                subtask_order: payload.new.subtask_order || 0,
+                section_order: payload.new.section_order || 0,
+                is_expanded: payload.new.is_expanded || false,
+                addedAt: new Date(payload.new.created_at),
+                deadline: payload.new.deadline ? new Date(payload.new.deadline) : null,
+                amount: payload.new.amount,
+                link: payload.new.link,
+                created_at: payload.new.created_at,
+                updated_at: payload.new.updated_at,
+                attachments: []
+              }
+              
+              setTasks(prev => {
+                // Check if task already exists (prevent duplicates)
+                if (prev.find(t => t.id === newTask.id)) return prev
+                return [newTask, ...prev]
+              })
+            } 
+            else if (payload.eventType === 'UPDATE' && payload.new) {
+              // Update existing task in state
+              setTasks(prev => prev.map(task => 
+                task.id === payload.new.id ? {
+                  ...task,
+                  title: payload.new.title,
+                  text: payload.new.title,
+                  description: payload.new.description,
+                  notes: payload.new.description,
+                  completed: payload.new.completed,
+                  important: payload.new.is_big_3_today,
+                  status: payload.new.status || 'inbox',
+                  priority: payload.new.priority || 'normal',
+                  page: payload.new.page || 'daily',
+                  section: payload.new.section,
+                  scheduled_date: payload.new.scheduled_date,
+                  section_order: payload.new.section_order || task.section_order,
+                  updated_at: payload.new.updated_at
+                } : task
+              ))
+            }
+            else if (payload.eventType === 'DELETE' && payload.old) {
+              // Remove deleted task from state
+              setTasks(prev => prev.filter(task => task.id !== payload.old.id))
+            }
           }
         )
         .subscribe()

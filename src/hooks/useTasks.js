@@ -692,7 +692,7 @@ export const useTasks = () => {
       
       // 2. Calcular nuevo section_order en la sección destino
       const targetSectionTasks = tasks.filter(t => t.section === targetSection && !t.completed)
-      let newOrder = targetSectionTasks.length // Por defecto al final
+      let newOrder = targetSectionTasks.length + 1 // Por defecto al final
       
       // Si hay targetTaskId, calcular posición específica
       if (targetTaskId) {
@@ -702,7 +702,21 @@ export const useTasks = () => {
         }
       }
       
-      // 3. Actualizar en Supabase
+      // ✅ ACTUALIZACIÓN OPTIMISTA INMEDIATA
+      const updatedTask = {
+        ...taskToMove,
+        section: targetSection,
+        section_order: newOrder,
+        updated_at: new Date().toISOString()
+      }
+      
+      // Actualizar estado local inmediatamente
+      const updatedTasks = tasks.map(task => 
+        task.id === taskId ? updatedTask : task
+      )
+      setTasks(updatedTasks)
+      
+      // 3. Actualizar en Supabase en background
       const { error } = await supabase
         .from('tasks')
         .update({ 
@@ -715,15 +729,17 @@ export const useTasks = () => {
       
       if (error) {
         console.error('Error moviendo tarea:', error)
+        // Revertir cambio optimista si hay error
+        await loadTasks()
         return { error: error.message }
       }
       
-      // 4. Refrescar tareas
-      await loadTasks()
       return { success: true }
       
     } catch (error) {
       console.error('Error inesperado:', error)
+      // Revertir cambio optimista si hay error crítico
+      await loadTasks()
       return { error: error.message }
     }
   }

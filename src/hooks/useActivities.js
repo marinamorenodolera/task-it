@@ -50,101 +50,15 @@ export const useActivities = () => {
     const currentHour = new Date().getHours()
     
     if (lastResetDate !== today && currentHour >= 6) {
-      // Limpiar actividades locales del día anterior
+      // Limpiar actividades locales del día anterior - formato cache actualizado
       setActivities([])
-      localStorage.setItem(`activities_${user.id}`, '[]')
+      const emptyCacheData = {
+        data: [],
+        timestamp: Date.now()
+      }
+      localStorage.setItem(`activities_${user.id}`, JSON.stringify(emptyCacheData))
       localStorage.setItem(`last_reset_${user.id}`, today)
       console.log('Daily reset applied at 6 AM')
-    }
-  }
-
-  // Load activities with daily reset check
-  const loadActivities = async () => {
-    if (!user?.id) {
-      console.warn('User not available in loadActivities')
-      return
-    }
-
-    try {
-      setLoading(true)
-      
-      // Check for daily reset first
-      checkDailyReset()
-      
-      // Cache con timestamp y expiración
-      const cacheKey = `activities_${user.id}`
-      const cacheData = JSON.parse(localStorage.getItem(cacheKey) || 'null')
-      const CACHE_EXPIRY = 5 * 60 * 1000 // 5 minutos en ms
-
-      let userActivities = []
-      let shouldRefetch = false
-
-      if (cacheData && cacheData.timestamp) {
-        const isExpired = (Date.now() - cacheData.timestamp) > CACHE_EXPIRY
-        if (isExpired) {
-          console.log('🔄 Cache expirado, cargando datos frescos...')
-          shouldRefetch = true
-          userActivities = cacheData.data || [] // Usar cache mientras carga nuevo
-        } else {
-          console.log('✅ Cache válido, usando datos locales')
-          userActivities = cacheData.data || []
-        }
-      } else {
-        console.log('📭 No hay cache, primera carga')
-        shouldRefetch = true
-      }
-
-      // Load predefined activities from localStorage or use defaults
-      const userPredefined = JSON.parse(localStorage.getItem(`predefined_activities_${user.id}`) || 'null')
-      if (userPredefined) {
-        setPredefinedActivities(userPredefined)
-      } else {
-        setPredefinedActivities(defaultPredefinedActivities)
-        localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(defaultPredefinedActivities))
-      }
-      
-      setActivities(userActivities)
-      setError(null)
-
-      // Si cache expiró, cargar datos frescos en background
-      if (shouldRefetch) {
-        loadFreshActivitiesInBackground()
-      }
-      
-    } catch (err) {
-      console.error('Error loading activities:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Save activity to Supabase for historical tracking
-  const saveToSupabase = async (activityData) => {
-    if (!user?.id) {
-      console.warn('User not available in saveToSupabase')
-      return { data: null, error: 'User not authenticated' }
-    }
-    
-    try {
-      const { data, error } = await supabase
-        .from('activity_history')
-        .insert({
-          user_id: user.id,
-          activity_type: activityData.type,
-          duration_minutes: parseInt(activityData.duration) || 0,
-          notes: activityData.notes || '',
-          activity_date: activityData.date || new Date().toISOString().split('T')[0],
-          activity_time: activityData.time || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-      return { data, error: null }
-    } catch (error) {
-      console.error('Error saving to Supabase:', error)
-      return { data: null, error: error.message }
     }
   }
 
@@ -155,14 +69,17 @@ export const useActivities = () => {
     try {
       console.log('🔄 Cargando actividades frescas en background...')
       
-      // Obtener actividades de hoy desde Supabase
-      const today = new Date().toISOString().split('T')[0]
+      // Obtener actividades recientes (últimas 18 horas como en getStats)
+      const eighteenHoursAgo = new Date()
+      eighteenHoursAgo.setHours(eighteenHoursAgo.getHours() - 18)
+      const eighteenHoursAgoISO = eighteenHoursAgo.toISOString()
+      
       const { data: freshData, error } = await supabase
         .from('activity_history')
         .select('*')
         .eq('user_id', user.id)
-        .eq('activity_date', today)
-        .order('activity_time', { ascending: false })
+        .gte('created_at', eighteenHoursAgoISO)
+        .order('created_at', { ascending: false })
       
       if (error) {
         console.warn('Error cargando datos frescos:', error)
@@ -203,6 +120,102 @@ export const useActivities = () => {
       console.error('Error en background refresh:', error)
     }
   }
+
+  // Load activities with daily reset check
+  const loadActivities = async () => {
+    if (!user?.id) {
+      console.warn('User not available in loadActivities')
+      return
+    }
+
+    try {
+      setLoading(true)
+      
+      // Check for daily reset first
+      checkDailyReset()
+      
+      // VERSIÓN SIMPLIFICADA - Carga directa de Supabase
+      console.log('🔄 Cargando actividades desde Supabase...')
+      
+      // Obtener actividades recientes directamente
+      const eighteenHoursAgo = new Date()
+      eighteenHoursAgo.setHours(eighteenHoursAgo.getHours() - 18)
+      
+      const { data: freshData, error: activitiesError } = await supabase
+        .from('activity_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('created_at', eighteenHoursAgo.toISOString())
+        .order('created_at', { ascending: false })
+      
+      if (activitiesError) {
+        console.error('Error loading activities from Supabase:', activitiesError)
+        setActivities([])
+        setError(activitiesError.message)
+        return
+      }
+      
+      // Mapear a formato local
+      const userActivities = (freshData || []).map(item => ({
+        id: item.id.toString(),
+        type: item.activity_type,
+        date: new Date(item.activity_date || item.created_at).toDateString(),
+        time: item.activity_time || new Date(item.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        notes: item.notes || '',
+        duration: item.duration_minutes || 0,
+        created_at: item.created_at
+      }))
+
+      // Load predefined activities from localStorage or use defaults
+      const userPredefined = JSON.parse(localStorage.getItem(`predefined_activities_${user.id}`) || 'null')
+      if (userPredefined) {
+        setPredefinedActivities(userPredefined)
+      } else {
+        setPredefinedActivities(defaultPredefinedActivities)
+        localStorage.setItem(`predefined_activities_${user.id}`, JSON.stringify(defaultPredefinedActivities))
+      }
+      
+      setActivities(userActivities)
+      setError(null)
+      console.log('✅ Actividades cargadas:', userActivities.length)
+      
+    } catch (err) {
+      console.error('Error loading activities:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Save activity to Supabase for historical tracking
+  const saveToSupabase = async (activityData) => {
+    if (!user?.id) {
+      console.warn('User not available in saveToSupabase')
+      return { data: null, error: 'User not authenticated' }
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('activity_history')
+        .insert({
+          user_id: user.id,
+          activity_type: activityData.type,
+          duration_minutes: parseInt(activityData.duration) || 0,
+          notes: activityData.notes || '',
+          activity_date: activityData.date || new Date().toISOString().split('T')[0],
+          activity_time: activityData.time || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      return { data, error: null }
+    } catch (error) {
+      console.error('Error saving to Supabase:', error)
+      return { data: null, error: error.message }
+    }
+  }
+
 
   // Load historical data from Supabase
   const loadHistoryFromSupabase = async (startDate, endDate) => {
@@ -473,42 +486,13 @@ export const useActivities = () => {
       )
       .subscribe()
 
-    // Auto-refresh cuando usuario vuelve a la app
-    let refreshTimeout = null
-    
-    const throttledRefresh = () => {
-      if (refreshTimeout) return
-      refreshTimeout = setTimeout(() => {
-        console.log('🎯 Refreshing due to app focus...')
-        loadActivities()
-        refreshTimeout = null
-      }, 2000) // Solo 1 refresh cada 2 segundos máximo
-    }
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden && user?.id) {
-        console.log('📱 Usuario volvió a la app')
-        throttledRefresh()
-      }
-    }
-
-    const handleWindowFocus = () => {
-      if (user?.id) {
-        console.log('🎯 App recibió focus')
-        throttledRefresh()
-      }
-    }
-
-    // Registrar event listeners
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('focus', handleWindowFocus)
+    // SIMPLIFICADO: Solo real-time de Supabase
+    console.log('🔗 Configurando suscripción real-time')
 
     // Cleanup
     return () => {
       subscription.unsubscribe()
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('focus', handleWindowFocus)
-      if (refreshTimeout) clearTimeout(refreshTimeout)
+      console.log('🔌 Suscripción cerrada')
     }
   }, [user])
 

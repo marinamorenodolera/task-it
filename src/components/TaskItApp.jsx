@@ -873,20 +873,30 @@ const TaskItApp = () => {
     return sectionMapping[sectionId] || sectionId
   }
 
-  const handleDragEnd = (event) => {
+  const handleDragEnd = async (event) => {
     const { active, over } = event
     
+    // Limpiar estados inmediatamente
     setActiveId(null)
     setDraggedTask(null)
-    setDragOverSection(null)  // ✅ Limpiar highlight de secciones
+    setDragOverSection(null)
 
-    if (!over || active.id === over.id) {
+    // Validaciones básicas
+    if (!over || !active || active.id === over.id) {
+      console.log('❌ Drag cancelled: No valid drop target')
       return
     }
 
-    // Extraer sectionId y taskId de los IDs
-    const [activeSectionId, ...activeTaskIdParts] = active.id.split('-')
-    const activeTaskId = activeTaskIdParts.join('-')
+    try {
+      // Extraer sectionId y taskId de los IDs con validación
+      const activeParts = active.id.split('-')
+      const activeSectionId = activeParts[0]
+      const activeTaskId = activeParts.slice(1).join('-')
+
+      if (!activeTaskId) {
+        console.log('❌ Invalid active task ID:', active.id)
+        return
+      }
 
     // ✅ MANEJAR DROP EN SECCIÓN VACÍA (droppable zone directa)
     if (!over.id.includes('-')) {
@@ -1009,6 +1019,11 @@ const TaskItApp = () => {
         await loadTasks() // Solo recargar si hay errores reales
       }
     }, 100) // Pequeño delay para que el usuario vea el cambio inmediato
+    
+    } catch (error) {
+      console.error('❌ Error in handleDragEnd:', error)
+      // No recargar aquí, moveTaskBetweenSections ya recarga si es necesario
+    }
   }
 
   const addQuickOption = async (taskId, type, value) => {
@@ -1136,10 +1151,11 @@ const TaskItApp = () => {
   }
 
   return (
-    <PullToRefresh onRefresh={loadActivities}>
-      <div 
-        className="min-h-screen bg-white"
-      onClick={(e) => {
+    <>
+      <PullToRefresh onRefresh={loadActivities}>
+        <div 
+          className="min-h-screen bg-white"
+        onClick={(e) => {
         // Hide keyboard when clicking outside the quick capture input
         if (!e.target.closest('input[placeholder*="Llamar cliente"]') && 
             !e.target.closest('.quick-capture-form') &&
@@ -1470,43 +1486,28 @@ const TaskItApp = () => {
           <button
             onClick={() => setShowActivityModal(true)}
             className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 min-h-[44px] rounded-lg transition-all touch-manipulation ${
-              activityStats.totalTimeToday > 0 
+              activityStats.totalTimeToday >= 15 
                 ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 ring-2 ring-purple-300' 
-                : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                : activityStats.totalTimeToday > 0
+                  ? 'bg-orange-50 text-orange-600 hover:bg-orange-100 ring-1 ring-orange-200'
+                  : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
             }`}
           >
-            {activityStats.totalTimeToday > 0 ? (
+            {activityStats.totalTimeToday >= 15 ? (
               <Trophy size={16} className="text-purple-700" />
             ) : (
               <Activity size={16} />
             )}
             <div className="flex items-center gap-2">
               <span className="text-xs sm:text-sm font-medium">
-                {activityStats.totalTimeToday > 0 ? (
+                {activityStats.totalTimeToday >= 15 ? (
                   <><span className="hidden sm:inline">Actividad </span><span className="font-bold text-purple-700">{activityStats.totalTimeToday}min<span className="hidden sm:inline"> conseguidos</span>!</span></>
+                ) : activityStats.totalTimeToday > 0 ? (
+                  <><span className="hidden sm:inline">Actividad </span><span className="font-medium text-orange-600">{activityStats.totalTimeToday}min</span></>
                 ) : (
                   'Actividad'
                 )}
               </span>
-              
-              {/* Indicadores sutiles de estado */}
-              <div className="flex items-center gap-1 ml-auto">
-                {/* Punto de estado de cache */}
-                <div 
-                  className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
-                    activities.length > 0 ? 'bg-green-400' : 'bg-gray-300'
-                  }`} 
-                  title="Estado de datos"
-                />
-                
-                {/* Punto de estado de conexión */}
-                <div 
-                  className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
-                    navigator.onLine ? 'bg-blue-400' : 'bg-red-400'
-                  }`} 
-                  title={navigator.onLine ? 'Conectado' : 'Sin conexión'}
-                />
-              </div>
             </div>
           </button>
         </div>
@@ -1536,17 +1537,11 @@ const TaskItApp = () => {
           {/* ✅ DRAG OVERLAY PARA VISUAL FEEDBACK DURANTE DRAG */}
           <DragOverlay>
             {draggedTask && (
-              <div className="transform rotate-3 opacity-90 shadow-2xl">
-                <div className="bg-white border-2 border-blue-300 rounded-lg p-3 max-w-sm">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {draggedTask.title}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                      Moviendo...
-                    </span>
-                  </div>
-                </div>
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-white shadow-md border border-gray-200 opacity-90 max-w-sm">
+                <Circle size={18} className="text-gray-400" />
+                <span className="text-sm font-normal text-gray-900 flex-1 min-w-0 truncate">
+                  {draggedTask.title}
+                </span>
               </div>
             )}
           </DragOverlay>
@@ -1564,15 +1559,6 @@ const TaskItApp = () => {
         />
       )}
 
-      {/* Activity Modal */}
-      <ActivityModal
-        isOpen={showActivityModal}
-        onClose={() => setShowActivityModal(false)}
-        predefinedActivities={predefinedActivities}
-        todayActivities={todayActivities}
-        stats={activityStats}
-        onAddActivity={addActivity}
-      />
 
       {/* Settings Modal */}
       {showSettingsModal && (
@@ -2236,8 +2222,19 @@ const TaskItApp = () => {
         </div>
       )}
 
-      </div>
-    </PullToRefresh>
+        </div>
+      </PullToRefresh>
+
+      {/* Activity Modal - Fuera del PullToRefresh para evitar conflictos */}
+      <ActivityModal
+        isOpen={showActivityModal}
+        onClose={() => setShowActivityModal(false)}
+        predefinedActivities={predefinedActivities}
+        todayActivities={todayActivities}
+        stats={activityStats}
+        onAddActivity={addActivity}
+      />
+    </>
   )
 }
 

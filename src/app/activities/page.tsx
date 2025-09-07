@@ -45,9 +45,6 @@ const ActivitiesPage = () => {
       let startDate = null
       
       switch (selectedPeriod) {
-        case 'today':
-          startDate = today.toISOString().split('T')[0]
-          break
         case 'week':
           const weekAgo = new Date(today)
           weekAgo.setDate(today.getDate() - 7)
@@ -57,6 +54,12 @@ const ActivitiesPage = () => {
           const monthAgo = new Date(today)
           monthAgo.setMonth(today.getMonth() - 1)
           startDate = monthAgo.toISOString().split('T')[0]
+          break
+        default:
+          // Por defecto mostrar de la última semana
+          const defaultWeekAgo = new Date(today)
+          defaultWeekAgo.setDate(today.getDate() - 7)
+          startDate = defaultWeekAgo.toISOString().split('T')[0]
           break
       }
       
@@ -448,16 +451,6 @@ const ActivitiesPage = () => {
           <div className="flex flex-wrap gap-3">
             <div className="flex gap-2">
               <button
-                onClick={() => setSelectedPeriod('today')}
-                className={`px-3 py-2 text-sm rounded-lg transition-colors min-h-[44px] ${
-                  selectedPeriod === 'today' 
-                    ? 'bg-orange-100 text-orange-700' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Hoy
-              </button>
-              <button
                 onClick={() => setSelectedPeriod('week')}
                 className={`px-3 py-2 text-sm rounded-lg transition-colors min-h-[44px] ${
                   selectedPeriod === 'week' 
@@ -479,16 +472,19 @@ const ActivitiesPage = () => {
               </button>
             </div>
             
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="all">Todas las actividades</option>
-              {uniqueTypes.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className="pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 appearance-none bg-white"
+              >
+                <option value="all">Todas</option>
+                {uniqueTypes.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <Filter className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
           </div>
         </div>
 
